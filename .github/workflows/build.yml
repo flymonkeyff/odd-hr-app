@@ -1,0 +1,119 @@
+# ODD HR 설치 파일 만들기 (Windows .exe, Mac .dmg)
+# - Actions 탭 → "ODD HR 빌드" → Run workflow 를 누르거나, v0.1.0 같은 태그를 올리면 돈다.
+# - 저장소 Settings → Secrets and variables → Actions 에 두 값을 넣으면 설치 파일에 팀 서버가 들어간다.
+#     ODDHR_SUPABASE_URL       예: https://abcd1234.supabase.co
+#     ODDHR_SUPABASE_ANON_KEY  Supabase → Project Settings → API → anon public 키
+#   넣지 않으면 첫 실행 때 "팀 서버 연결" 화면이 나온다.
+name: ODD HR 빌드
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  agent:
+    name: 카톡 에이전트 (Windows 실행 파일)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 카카오톡 연결 모듈 받기 (검토한 고정 버전)
+        shell: pwsh
+        run: |
+          $c = "4cf1a996396edfbe5fa5e4acf368877a65abb0bb"
+          Invoke-WebRequest "https://github.com/jjround/kakaotalk-mcp/archive/$c.zip" -OutFile k.zip
+          Expand-Archive k.zip -DestinationPath k
+          Move-Item "k/kakaotalk-mcp-$c" kmcp
+          Copy-Item agent/oddhr_*.py kmcp/src/kakaotalk_mcp/
+      - run: pip install pyinstaller==6.11.1 pywin32==308
+      - name: 실행 파일 만들기
+        run: >
+          pyinstaller --onefile --console --name odd-hr-agent --paths kmcp/src
+          --hidden-import kakaotalk_mcp.kakao --hidden-import kakaotalk_mcp.parse
+          --hidden-import kakaotalk_mcp.oddhr_agent --hidden-import kakaotalk_mcp.oddhr_extract --hidden-import kakaotalk_mcp.oddhr_llm
+          --distpath agent-dist agent/entry.py
+      - name: 실행 파일 시험
+        shell: pwsh
+        run: |
+          $out = & agent-dist/odd-hr-agent.exe --json status
+          Write-Host $out
+          if (-not ($out -match '"ok": true')) { throw "에이전트가 응답하지 않습니다" }
+      - name: 규칙 엔진 채점
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python agent/eval/score.py 카톡-할일-판정-최종검증.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent
+          path: agent-dist/odd-hr-agent.exe
+
+  windows:
+    name: Windows 설치 파일
+    needs: agent
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent
+          path: agent-dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run dist:win
+        env:
+          ODDHR_SUPABASE_URL: ${{ secrets.ODDHR_SUPABASE_URL }}
+          ODDHR_SUPABASE_ANON_KEY: ${{ secrets.ODDHR_SUPABASE_ANON_KEY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ODD-HR-Windows
+          path: dist/*.exe
+
+  mac:
+    name: Mac 설치 파일
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: 앱 만들기 (Intel + Apple 실리콘)
+        run: npm run vendor && npx electron-builder --mac --universal --dir --publish never
+        env:
+          ODDHR_SUPABASE_URL: ${{ secrets.ODDHR_SUPABASE_URL }}
+          ODDHR_SUPABASE_ANON_KEY: ${{ secrets.ODDHR_SUPABASE_ANON_KEY }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: 임시 서명과 dmg 만들기
+        run: |
+          APP="$(ls -d dist/mac-universal/*.app | head -1)"
+          codesign --force --deep --sign - "$APP"
+          VERSION=$(node -p "require('./package.json').version")
+          mkdir -p dmgroot && cp -R "$APP" dmgroot/ && ln -s /Applications dmgroot/Applications
+          hdiutil create -volname "ODD HR" -srcfolder dmgroot -ov -format UDZO "dist/ODD-HR-$VERSION-mac.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ODD-HR-Mac
+          path: dist/*.dmg
+
+  release:
+    name: 릴리스에 올리기
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/ODD-HR-Windows/*.exe
+            out/ODD-HR-Mac/*.dmg

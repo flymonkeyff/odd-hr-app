@@ -1,0 +1,95 @@
+{
+  "name": "odd-hr",
+  "productName": "ODD HR",
+  "version": "0.1.0",
+  "description": "ODD HR: 팀 AX 데스크톱 앱 (아침상, 작업, 할 일, 목표, 미팅, 팀원, 카톡 에이전트)",
+  "author": "ODD",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "ui": "python3 tools/build_ui.py",
+    "vendor": "node tools/vendor.js",
+    "start": "npm run vendor && electron .",
+    "test:server": "node server/test/run.js",
+    "test:e2e": "node test/e2e.js",
+    "dist:win": "npm run vendor && electron-builder --win --x64 --publish never",
+    "dist:mac": "npm run vendor && electron-builder --mac --universal --publish never"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "2.45.4",
+    "electron": "31.7.7",
+    "electron-builder": "24.13.3",
+    "@electric-sql/pglite": "0.2.12",
+    "playwright": "1.48.2"
+  },
+  "build": {
+    "appId": "kr.oddhr.app",
+    "productName": "ODD HR",
+    "copyright": "ODD",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**",
+      "build/icon.png",
+      "build/tray.png",
+      "build/trayTemplate*.png",
+      "app-config.json",
+      "package.json",
+      "!app/**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "agent-dist",
+        "to": "agent",
+        "filter": [
+          "odd-hr-agent.exe"
+        ]
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "ODD-HR-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "ODD HR",
+      "uninstallDisplayName": "ODD HR",
+      "language": "1042"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "artifactName": "ODD-HR-${version}-mac.dmg"
+    },
+    "dmg": {
+      "title": "ODD HR"
+    },
+    "publish": null
+  }
+}

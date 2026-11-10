@@ -1,0 +1,7 @@
+node_modules/
+dist/
+agent-dist/
+app/vendor/
+app-config.json
+*.log
+__pycache__/
