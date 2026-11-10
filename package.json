@@ -59,10 +59,16 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.png",
-      "artifactName": "ODD-HR-Setup-${version}.exe"
+      "artifactName": "ODD-HR-${version}-win.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -71,7 +77,8 @@
       "createDesktopShortcut": true,
       "shortcutName": "ODD HR",
       "uninstallDisplayName": "ODD HR",
-      "language": "1042"
+      "language": "1042",
+      "artifactName": "ODD-HR-Setup-${version}.exe"
     },
     "mac": {
       "target": [

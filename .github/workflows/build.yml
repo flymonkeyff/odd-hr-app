@@ -71,10 +71,19 @@ jobs:
         env:
           ODDHR_SUPABASE_URL: ${{ secrets.ODDHR_SUPABASE_URL }}
           ODDHR_SUPABASE_ANON_KEY: ${{ secrets.ODDHR_SUPABASE_ANON_KEY }}
+      - name: 파일 지문 (받은 파일이 온전한지 확인용)
+        shell: pwsh
+        run: Get-ChildItem dist -File | Where-Object { $_.Extension -in '.exe', '.zip' } | ForEach-Object { "{0}  {1}  {2}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash, $_.Length, $_.Name } | Tee-Object dist/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: ODD-HR-Windows
-          path: dist/*.exe
+          path: |
+            dist/*.exe
+            dist/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ODD-HR-Windows-portable
+          path: dist/*-win.zip
 
   mac:
     name: Mac 설치 파일
