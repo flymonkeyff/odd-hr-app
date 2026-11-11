@@ -93,6 +93,152 @@ style = rep(style, "/* ---- 날짜 선택기 ---- */", """/* ---- 앱: 프로젝
 .projsel select { border: 0; background: var(--fill-2); border-radius: 8px; padding: 6px 8px; font-size: 13.5px; font-weight: 500; width: 100%; }
 .menu a[href="#team"]::before { -webkit-mask-image: var(--ic-team); mask-image: var(--ic-team); }
 .menu a[href="#settings"]::before { -webkit-mask-image: var(--ic-settings); mask-image: var(--ic-settings); }
+.menu a[href="#messages"]::before { -webkit-mask-image: var(--ic-messages); mask-image: var(--ic-messages); }
+.menu a[href="#drive"]::before { -webkit-mask-image: var(--ic-drive); mask-image: var(--ic-drive); }
+.menu a[href="#forms"]::before { -webkit-mask-image: var(--ic-forms); mask-image: var(--ic-forms); }
+/* Mac 앱: 신호등 버튼 자리 비우기, 위쪽 끌어서 창 옮기기 */
+.mac-app nav.side { padding-top: 52px; }
+.mac-app nav.side::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 44px; -webkit-app-region: drag; }
+.mac-app main::before { content: ""; position: fixed; top: 0; left: 232px; right: 0; height: 28px; -webkit-app-region: drag; z-index: 4; }
+.mac-app .gate::before { content: ""; position: fixed; inset: 0 0 auto 0; height: 36px; -webkit-app-region: drag; }
+.mac-app button, .mac-app a, .mac-app input, .mac-app select, .mac-app textarea { -webkit-app-region: no-drag; }
+@media (max-width: 860px) { .mac-app nav.side { padding-top: 6px; } .mac-app main::before { left: 0; } }
+.more-btn { display: none; }
+@media (max-width: 860px) {
+  .menu { position: relative; }
+  .menu a.more-item { display: none; }
+  .more-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; border: 0; background: none; padding: 7px 2px; font-size: 11px; color: var(--muted); font-weight: 500; }
+  .more-btn::before { content: ""; width: 23px; height: 23px; background: currentColor; margin-bottom: 2px; -webkit-mask: var(--ic-more) no-repeat center / contain; mask: var(--ic-more) no-repeat center / contain; }
+  .more-btn[aria-current="page"], .more-btn[aria-expanded="true"] { color: var(--blue); }
+  .more-btn .badge { position: absolute; top: 0; right: 14%; font-size: 10.5px; min-width: 17px; height: 17px; line-height: 17px; padding: 0 5px; background: var(--red); color: #fff; border-radius: 999px; }
+  /* 더보기를 누르면 나머지 메뉴가 막대 위 시트로 펼쳐진다 */
+  .menu.open .more-sheet { display: grid; }
+  .more-sheet { position: absolute; left: 0; right: 0; bottom: calc(100% + 10px); grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 10px; background: var(--bg); border-radius: 16px; box-shadow: var(--shadow-lift); }
+  .more-sheet a { padding: 10px 2px !important; }
+  .projsel { display: none !important; }
+  .mproj { display: flex !important; }
+}
+.more-sheet { display: none; }
+.mproj { display: none; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.mproj select { border: 0; background: var(--fill-2); border-radius: 8px; padding: 6px 10px; flex: 1; min-width: 0; color: var(--ink); }
+/* 메시지 */
+.chat-split { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.chat-list .rows .row { grid-template-columns: auto minmax(0, 1fr) auto; }
+.chat-list .badge, .row .badge { font-size: 12px; font-weight: 600; background: var(--red); color: #fff; border-radius: 999px; padding: 0 6px; min-width: 19px; height: 19px; line-height: 19px; text-align: center; }
+.avatar.small { width: 30px; height: 30px; font-size: 13px; }
+.avatar.group { background: var(--fill); color: var(--ink); }
+.chat { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: calc(100vh - 210px); min-height: 380px; }
+.chat-head { display: flex; gap: 10px; align-items: center; }
+.chat-head h2 { margin: 0; }
+.chat-log { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 6px 2px; overscroll-behavior: contain; }
+.chat-day { align-self: center; font-size: 12px; color: var(--muted); background: var(--grouped); border-radius: 999px; padding: 2px 10px; margin: 8px 0 2px; }
+.bubble-row { display: flex; }
+.bubble-row.mine { justify-content: flex-end; }
+.bubble { max-width: min(560px, 82%); background: var(--grouped); border-radius: 16px 16px 16px 4px; padding: 8px 12px; display: grid; gap: 2px; }
+.bubble-row.mine .bubble { background: var(--blue); color: var(--on-accent); border-radius: 16px 16px 4px 16px; }
+.bubble .who { font-size: 12px; font-weight: 600; color: var(--blue-text); }
+.bubble .txt { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.45; }
+.bubble .meta { display: flex; gap: 10px; justify-content: flex-end; font-size: 11.5px; opacity: 0.72; }
+.bubble .meta .linkish { font-size: 11.5px; color: inherit; font-weight: 500; text-decoration: underline; }
+.bubble-row:not(:hover):not(:focus-within) .meta .linkish { opacity: 0; }
+@media (hover: none) { .bubble-row .meta .linkish { opacity: 1 !important; } }
+.show-narrow { display: none; }
+@media (max-width: 860px) {
+  .chat-split { grid-template-columns: minmax(0, 1fr); }
+  .chat-split.open .chat-list.hide-narrow { display: none; }
+  .chat-split:not(.open) .chat { display: none; }
+  .show-narrow { display: inline-flex; }
+  .chat { height: calc(100vh - 230px - env(safe-area-inset-bottom, 0px)); }
+}
+/* 드라이브 */
+.drive-up { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 20px; }
+@media (max-width: 860px) { .drive-up { grid-template-columns: minmax(0, 1fr); } }
+.dropzone { border: 1.5px dashed var(--sep-strong); border-radius: var(--r-md); padding: 22px 16px; display: grid; gap: 6px; text-align: center; cursor: pointer; color: var(--muted); font-size: 13px; background: var(--grouped); }
+.dropzone strong { color: var(--ink); font-size: 14.5px; }
+.dropzone.over { border-color: var(--blue); background: var(--blue-soft); }
+.searchin { flex: 1 1 200px; min-width: 0; border: 0; box-shadow: inset 0 0 0 0.5px var(--sep-strong); border-radius: 999px; padding: 6px 14px; background: var(--bg); }
+.file-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+.ftype { font-size: 11px; font-weight: 700; width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: var(--blue-soft); color: var(--blue-text); }
+/* 알림, 시작 안내, 주간 */
+.notif .row.unread .t { font-weight: 700; }
+.notif .row.unread::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); position: absolute; left: -2px; top: 50%; transform: translateY(-50%); }
+.notif .row { position: relative; }
+.notif-mini { display: flex; gap: 10px; align-items: center; font-size: 13.5px; color: var(--muted); padding: 0 4px; }
+.t.struck { text-decoration: line-through; color: var(--muted); }
+.starter .row[disabled] { opacity: 0.7; cursor: default; }
+.weekly-item { display: grid; gap: 8px; }
+.weekly-item .row { grid-template-columns: auto minmax(0, 1fr) auto; }
+.weekly-body { display: grid; gap: 8px; padding: 0 6px 10px 46px; }
+@media (max-width: 860px) { .weekly-body { padding-left: 6px; } }
+.tplbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.tplbar select { border: 0; background: var(--fill-2); border-radius: 8px; padding: 5px 8px; }
+.row-edit { padding: 12px; background: var(--grouped); border-radius: var(--r-md); }
+.linkish.danger { color: var(--red-text); }
+/* 들어온 업무 요청, 목표 확인, 말하기 */
+.incoming { box-shadow: var(--shadow), inset 0 0 0 1.5px var(--blue); }
+.row.req, .goal-ask, .voice-item, .mail-row { grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; }
+.goal-ask .pct { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 44px; font-size: 15px; }
+.ask { box-shadow: var(--shadow), inset 0 0 0 1.5px var(--indigo-text, #5e5ce6); }
+.btn.mic { white-space: nowrap; }
+.quick-bar > .quick-in { flex: 1 1 0; width: 0; min-width: 0; }
+.box > * { min-width: 0; }
+@media (max-width: 600px) {
+  .voice .quick-bar { flex-wrap: wrap; }
+  .voice .quick-bar > .quick-in { flex-basis: 100%; width: 100%; order: -1; }
+  .voice .quick-bar > .btn { flex: 1; }
+  .incoming .row.req, .goal-ask, .mail-row, .voice-item { grid-template-columns: auto minmax(0, 1fr); }
+  .incoming .row.req > .actions, .goal-ask > .actions, .mail-row > .actions, .voice-item > .actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .paper { padding: 22px 18px; }
+}
+.btn.mic.live { background: var(--red); color: #fff; animation: pulse 1.4s infinite; }
+@keyframes pulse { 50% { opacity: .65; } }
+.voice-item { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+.voice-item.off { opacity: .45; }
+.voice-item .prio { font-weight: 700; color: var(--blue-text); min-width: 18px; font-variant-numeric: tabular-nums; }
+.inline-edit { border: 0; background: transparent; font: inherit; font-weight: 600; font-size: 15px; width: 100%; padding: 2px 0; color: var(--ink); border-bottom: 1px dashed var(--sep-strong); }
+.voice-item select { border: 0; background: var(--fill-2); border-radius: 8px; padding: 4px 6px; }
+/* 메시지 파일 */
+.btn.attach { padding: 8px 12px; font-size: 16px; }
+.btn.attach[aria-pressed="true"] { background: var(--blue-soft); }
+.file-pick { display: grid; gap: 8px; max-height: 280px; overflow: auto; padding: 10px; background: var(--grouped); border-radius: var(--r-md); }
+.file-pick .row { grid-template-columns: auto minmax(0, 1fr) auto; }
+.fchip { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: center; background: var(--bg); color: var(--ink); border-radius: 12px; padding: 8px 10px; min-width: 220px; }
+.fchip .ftype { width: 36px; height: 36px; }
+.fchip .fn { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.fchip .fm { font-size: 11.5px; color: var(--muted); }
+.fchip .factions { grid-column: 1 / -1; display: flex; gap: 12px; }
+.fchip .linkish { font-size: 13px; }
+.fchip.gone { display: block; color: var(--muted); font-size: 13px; }
+.bubble-row.mine .fchip { color: var(--ink); }
+.file-row.hl { box-shadow: inset 0 0 0 2px var(--blue); border-radius: var(--r-md); }
+.share-to { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.share-to select { border: 0; background: var(--fill-2); border-radius: 8px; padding: 5px 8px; max-width: 220px; }
+/* 양식: 종이 미리 보기와 인쇄 */
+.aibar { box-shadow: var(--shadow), inset 0 0 0 1.5px var(--blue); }
+.paper-box { display: grid; gap: 12px; align-content: start; }
+.paper { background: #fff; color: #111; border-radius: 6px; padding: 36px 34px; box-shadow: 0 1px 3px rgba(0,0,0,.15), 0 10px 30px rgba(0,0,0,.08); max-height: 70vh; overflow: auto; }
+.paper-title { font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 6px; letter-spacing: .02em; }
+.paper-sub { text-align: center; color: #666; font-size: 12.5px; margin-bottom: 18px; }
+.paper-body { white-space: pre-wrap; font: 13.5px/1.75 "Noto Sans KR", -apple-system, sans-serif; margin: 0; overflow-wrap: anywhere; }
+textarea.auto { min-height: 0; }
+.btn.google { background: var(--bg); color: var(--ink); box-shadow: inset 0 0 0 1px var(--sep-strong); }
+.print-doc { display: none; }
+@media print {
+  body.printing > *:not(.print-doc) { display: none !important; }
+  body.printing .print-doc { display: block !important; color: #000; font: 11pt/1.7 "Noto Sans KR", sans-serif; padding: 0 6mm; }
+  .print-doc h1 { text-align: center; font-size: 18pt; margin: 0 0 14pt; }
+  .print-doc h3 { font-size: 11pt; margin: 12pt 0 2pt; }
+  .print-doc p { margin: 0; }
+  @page { size: A4; margin: 20mm 18mm; }
+}
+/* 아이폰·아이패드: 입력할 때 화면이 확대되지 않게 16px, 누르는 곳은 44px 이상 */
+@supports (-webkit-touch-callout: none) {
+  input, select, textarea, .quick-in { font-size: 16px !important; }
+  .btn.small { min-height: 36px; }
+  .row { min-height: 44px; }
+}
+html { -webkit-text-size-adjust: 100%; }
+body { overscroll-behavior-y: none; }
 .team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
 .mcard { border-radius: var(--r-lg); padding: 18px; display: grid; gap: 12px; align-content: start; background: var(--bg); box-shadow: var(--shadow); min-width: 0; }
 .mcard.me { box-shadow: var(--shadow), inset 0 0 0 1.5px var(--blue); }
@@ -153,6 +299,10 @@ input.toggle:focus-visible { box-shadow: 0 0 0 3px var(--focus) !important; }
 from urllib.parse import quote
 ic = {
     "team": '<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="16.8" cy="9.3" r="2.6"/><path d="M15.6 14.6c2.6-.3 4.4 1.3 4.9 4.4"/>',
+    "messages": '<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 3.5V17H6.5A2.5 2.5 0 0 1 4 14.5z"/><path d="M8 9h8M8 12.5h5"/>',
+    "drive": '<path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2.2h7a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M12 11.5v5M9.6 13.8 12 11.5l2.4 2.3"/>',
+    "forms": '<path d="M6.5 3.5h7l4 4v12a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z"/><path d="M13.5 3.5v4h4M8.5 12h7M8.5 15.5h7M8.5 8.5h2.5"/>',
+    "more": '<circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/>',
     "settings": '<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2 5.5 5.5"/><circle cx="12" cy="12" r="6.6"/>',
 }
 vars_css = ":root { " + " ".join(
@@ -167,7 +317,6 @@ body = rep(body, '''    <div class="menu" id="menu"></div>''', '''    <div class
 script = rep(script, '''  const PROJECTS = ["양천경찰서 영상", "장기실종아동 공모전", "30km/h 표지판의 시선", "블렌더 AI VFX 스터디", "미분류"];
   const PROJECT_DEADLINES = { "양천경찰서 영상": ["2026-11-27", "편집 완료"], "장기실종아동 공모전": ["2026-12-01", "접수 마감"] };''',
              '''  // 프로젝트와 마감은 서버의 내 프로젝트에서 온다 (앱 연결부가 알려 줄 때마다 다시 채운다)
-  const APP = window.oddhrApp;
   const PROJECTS = [];
   const PROJECT_DEADLINES = {};
   function syncProjects() {
@@ -177,9 +326,9 @@ script = rep(script, '''  const PROJECTS = ["양천경찰서 영상", "장기실
   }
   syncProjects();''')
 script = rep(script, '''    ["home", "홈"], ["tasks", "작업"], ["todo", "할 일"], ["goals", "목표"], ["meetings", "미팅"], ["agents", "에이전트"]''',
-             '''    ["home", "홈"], ["tasks", "작업"], ["todo", "할 일"], ["goals", "목표"], ["meetings", "미팅"], ["team", "팀원"], ["agents", "에이전트"], ["settings", "설정"]''')
+             '''    ["home", "홈"], ["tasks", "작업"], ["todo", "할 일"], ["messages", "메시지"], ["drive", "드라이브"], ["meetings", "미팅"], ["goals", "목표"], ["forms", "양식"], ["team", "팀원"], ["agents", "에이전트"], ["settings", "설정"]''')
 script = rep(script, "    const v = { home: viewHome, tasks: viewTasks, todo: viewTodo, goals: viewGoals, meetings: viewMeetings, agents: viewAgents }[S.view] || viewHome;",
-             "    const v = { home: viewHome, tasks: viewTasks, todo: viewTodo, goals: viewGoals, meetings: viewMeetings, team: viewTeam, agents: viewAgents, settings: viewSettings }[S.view] || viewHome;")
+             "    const v = { home: viewHome, tasks: viewTasks, todo: viewTodo, goals: viewGoals, meetings: viewMeetings, team: viewTeam, agents: viewAgents, settings: viewSettings, messages: viewMessages, drive: viewDrive, forms: viewForms }[S.view] || viewHome;")
 # 새로 만드는 폼은 지금 고른 프로젝트를 기본으로
 script = script.replace('PROJECTS.map((p) => h("option", { value: p, text: p }))', 'projOptions()')
 script = rep(script, '''  function renderMenu() {
@@ -199,15 +348,15 @@ script = rep(script, '''  function renderMenu() {
 # Claude 전용 안내 정리
 script = rep(script, '''    if (S.mode === "live" && S.canWrite === false) main.appendChild(h("div", { class: "notice" }, "보기 권한으로 열었습니다. 승인, 상태 변경, 새로 만들기를 하려면 PM에게 참여자(Contributor) 권한을 요청하세요."));\n''', "")
 script = rep(script, '''    server_not_connected: "PC 에이전트에 닿지 않습니다. 설치하기.bat을 실행한 PC의 Claude 데스크톱 앱에서 Desk를 열어야 합니다. 브라우저에서는 '파일에서 가져오기'를 쓰세요.",''',
-             '''    server_not_connected: "이 PC에는 카톡 에이전트가 없습니다. 카톡 점검은 PM의 Windows PC에 설치한 ODD HR 앱에서 돕니다.",''')
+             '''    server_not_connected: "이 PC에는 카톡 에이전트가 없습니다. 카톡 점검은 PM의 PC(Windows, Mac)에 설치한 ODD HR 앱에서 돕니다.",''')
 script = re.sub(r'h\("span", \{ class: "pill ok", text: "Claude 크레딧 0" \}\)', 'h("span", { class: "pill ok", text: "추가 비용 0" })', script)
 script = script.replace('"이번 주 상태 변화로 초안을 만듭니다. 본인이 고쳐서 제출하세요. Claude 크레딧을 쓰지 않습니다."', '"이번 주 상태 변화로 초안을 만듭니다. 본인이 고쳐서 제출하세요."')
 script = rep(script, '''        h("div", { class: "msg", style: "color:var(--muted)", text: "자동 정리는 무료입니다. AI 요약은 더 매끄럽지만 누른 사람의 Claude 사용량을 씁니다." }),''',
              '''        h("div", { class: "msg", style: "color:var(--muted)", text: "자동 정리는 노트 문장에서 결정 사항과 액션 아이템을 골라 줍니다. 고른 것은 작업 제안으로 올릴 수 있습니다." }),''')
 script = rep(script, '''"Claude 크레딧을 쓰지 않습니다. 카톡 점검은 PM PC의 Windows 작업 스케줄러가 돌리고, 나머지는 Desk가 바로 계산합니다."''',
-             '''"추가 비용이 들지 않습니다. 카톡 점검은 PM의 Windows PC에서 ODD HR 앱이 돌리고, 나머지는 앱이 바로 계산합니다."''')
+             '''"추가 비용이 들지 않습니다. 카톡 점검은 PM의 PC(Windows, Mac)에서 ODD HR 앱이 돌리고, 나머지는 앱이 바로 계산합니다."''')
 script = rep(script, '''      S.isOwner ? null : h("div", { class: "notice", text: "PC 에이전트 직접 연결은 Desk 주인(PM)의 Claude 데스크톱 앱에서만 됩니다." }),''',
-             '''      S.isOwner ? null : h("div", { class: "notice", text: "카톡 에이전트는 PM의 Windows PC에서 ODD HR 앱이 켜져 있을 때 돕니다. 대화방과 간격은 설정에서 바꿉니다." }),''')
+             '''      S.isOwner ? null : h("div", { class: "notice", text: "카톡 에이전트는 PM의 PC(Windows, Mac)에서 ODD HR 앱이 켜져 있을 때 돕니다. 대화방과 간격은 설정에서 바꿉니다." }),''')
 script = rep(script, '''        h("span", { class: "msg", style: "color:var(--muted)", text: "Claude 앱 밖(브라우저)에서는 PC의 %LOCALAPPDATA%\\\\ODD-HR\\\\outbox 파일을 올리세요." })),''',
              '''        h("span", { class: "msg", style: "color:var(--muted)", text: "다른 PC의 카톡 에이전트가 만든 %LOCALAPPDATA%\\\\ODD-HR\\\\outbox 파일을 올려도 됩니다." })),''')
 script = rep(script, '''[["ODD HR 기획서", LINKS.plan, "원칙, 역할, 운영 규칙"], ["작업", "#tasks", "제안과 할 일 (이 화면의 저장소)"]''', '''[["작업", "#tasks", "제안과 할 일 (팀 서버)"]''')
@@ -239,7 +388,7 @@ script = rep(script, '''      if (!quiet || r.added || r.flagged) S.flash.pc = {
 script = script.replace('["아침상", "Desk",', '["아침상", "앱",').replace('["미팅 정리", "Desk",', '["미팅 정리", "앱",').replace('["주간 업데이트", "Desk",', '["주간 업데이트", "앱",')
 script = rep(script, '"결정 사항과 액션 아이템 고르기", "AI 요약은 선택 (누른 사람의 Claude 사용)"', '"결정 사항과 액션 아이템 고르기", "고른 것을 작업 제안으로 올리기"')
 script = rep(script, '"PM PC에서 돌아가는 ODD HR 자체 에이전트입니다. 3분마다 카톡 대화방을 읽고 규칙으로 할 일 후보를 골라 둡니다. Desk를 열어 두면 3분마다 가져오고, 바로 보고 싶으면 \'지금 카톡 점검하기\'를 누르세요."',
-             '"PM의 Windows PC에서 ODD HR 앱 안에 들어 있는 에이전트입니다. 앱이 켜져 있으면(창을 닫아 트레이에 있어도) 정한 간격마다 카톡 대화방을 읽고, 할 일 후보를 바로 팀 서버에 제안으로 올립니다. 바로 보고 싶으면 \'지금 카톡 점검하기\'를 누르세요."')
+             '"PM의 PC(Windows, Mac)에서 ODD HR 앱 안에 들어 있는 에이전트입니다. 앱이 켜져 있으면(창을 닫아 트레이에 있어도) 정한 간격마다 카톡 대화방을 읽고, 할 일 후보를 바로 팀 서버에 제안으로 올립니다. 바로 보고 싶으면 \'지금 카톡 점검하기\'를 누르세요."')
 script = re.sub(r'h\("dt", \{ text: "자동 점검" \}\), h\("dd", \{ text: st\.watch && st\.watch\.running \? .*?\}\),\n',
                 'h("dt", { text: "자동 점검" }), h("dd", { text: lsGet("oddhr.autoscan") !== "0" ? `${Math.round((st.interval_sec || 180) / 60)}분마다 (앱이 켜져 있을 때)` : "꺼짐 (설정에서 켜기)" }),\n', script, count=1, flags=re.S)
 script = script.replace("Claude 크레딧을 쓰지 않습니다.", "추가 비용이 들지 않습니다.")
@@ -254,8 +403,8 @@ NEW_VIEWS = r'''
     "PM": ["기획 조율", "제작 관리", "검수", "납품"]
   };
   const STAGE_EXTRA = ["대기", "막힘", "완료"];
-  const CAN_PM = ["프로젝트 만들기와 입장 코드 발급", "멤버 역할 바꾸기, PM 권한 주기, 내보내기", "할 일 완료 처리·승인·삭제", "미팅 정보 고치기", "PM 확인 필요 보기", "팀원 단계 확인 체크", "카톡 에이전트 (Windows)"];
-  const CAN_MEMBER = ["할 일 만들기, 검토 요청까지 올리기", "막힘 표시", "제안 승인·넘기기", "미팅 노트와 자동 정리", "내 지금 단계 바꾸기", "오늘 결정 바 (나만 보기)"];
+  const CAN_PM = ["주간 업데이트 확인과 코멘트", "드라이브 정리 (모든 파일 지우기)", "프로젝트 만들기와 입장 코드 발급", "멤버 역할 바꾸기, PM 권한 주기, 내보내기", "할 일 완료 처리·승인·삭제", "미팅 정보 고치기", "PM 확인 필요 보기", "팀원 단계 확인 체크", "카톡 에이전트 (Windows, Mac)"];
+  const CAN_MEMBER = ["할 일 만들기, 팀원에게 제안하기, 검토 요청까지 올리기", "막힘 표시", "제안 수락·넘기기", "메시지 (팀 대화방, 1:1)", "드라이브 올리기 (내 파일만 지우기)", "미팅 노트, 회의록 양식, 자동 정리", "주간 업데이트 제출", "내 지금 단계 바꾸기", "오늘 결정 바 (나만 보기)"];
   const ago = (iso) => { if (!iso) return ""; const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 1 ? "방금" : m < 60 ? `${m}분 전` : m < 1440 ? `${Math.round(m / 60)}시간 전` : `${Math.round(m / 1440)}일 전`; };
   const appAct = (key, fn, ok) => act(key, fn, ok);
 
@@ -384,9 +533,31 @@ NEW_VIEWS = r'''
 
     const agentBox = APP.agentAvailable && APP.isPMAny() ? agentSettings() : null;
 
+    // 다른 기기에서 같은 사람으로 쓰기: 코드 계정에 이메일을 연결한다
+    const link = APP.isAnon ? h("section", { class: "box" }, h("h2", {}, "이메일 연결", h("span", { class: "pill risk", text: "권장" })),
+      h("p", { class: "sub", text: "지금은 이 기기에만 저장된 계정입니다. 이메일과 비밀번호를 연결하면 아이폰, 아이패드, 다른 PC에서도 '이메일로 로그인'으로 같은 사람으로 들어오고, 앱을 다시 깔아도 기록이 남습니다." }),
+      h("form", { class: "form", onsubmit: (e) => { e.preventDefault(); const f = e.target; if (f.lpw.value.length < 6) { S.flash.link = { ok: false, text: "비밀번호는 6자 이상입니다." }; render(); return; } if (f.lpw.value !== f.lpw2.value) { S.flash.link = { ok: false, text: "비밀번호 두 칸이 다릅니다." }; render(); return; } act("link", () => APP.linkEmail(f.lemail.value.trim(), f.lpw.value), "이메일을 연결했습니다. 다른 기기에서는 '이메일로 로그인'으로 들어오세요."); } },
+        h("label", { class: "field" }, "이메일", h("input", { id: "lemail", name: "lemail", type: "email", autocomplete: "email", required: true })),
+        h("label", { class: "field" }, "비밀번호 (6자 이상)", h("input", { id: "lpw", name: "lpw", type: "password", autocomplete: "new-password" })),
+        h("label", { class: "field" }, "비밀번호 확인", h("input", { id: "lpw2", name: "lpw2", type: "password", autocomplete: "new-password" })),
+        h("div", { class: "actions" }, h("button", { class: "btn primary", type: "submit", disabled: S.busy, text: "연결하기" }))),
+      flashEl("link")) : null;
+
+    const notifOn = lsGet("oddhr.notify") !== "0";
+    const isWeb = !APP.platform || APP.platform === "web";
+    const alerts = h("section", { class: "box" }, h("h2", {}, "알림"),
+      h("div", { class: "setrow" },
+        h("div", { class: "lab2", text: "화면 알림" }), h("span", { style: "display:flex;gap:8px;align-items:center;font-size:14px" }, h("input", { class: "toggle", type: "checkbox", id: "notifon", checked: notifOn, onchange: (e) => { lsSet("oddhr.notify", e.target.checked ? "1" : "0"); render(); } }), isWeb ? "앱이 열려 있을 때 새 제안, 수락·거절, 메시지, 주간 업데이트를 알립니다" : "새 제안, 수락·거절, 메시지, 주간 업데이트를 운영체제 알림으로도 띄웁니다"),
+        h("div", { class: "lab2", text: "알리는 것" }), h("div", { class: "msg", style: "color:var(--muted)", text: "내게 온 할 일 제안 · 내 제안의 수락과 거절 · 완료 처리 · 1:1 메시지 · 오늘·내일 마감 · (PM) 검토 요청, 막힘, 주간 업데이트 제출 · 내 주간 업데이트 PM 확인" })));
+
+    const mobile = APP.webUrl ? h("section", { class: "box" }, h("h2", {}, "아이폰 · 아이패드에서 쓰기"),
+      h("p", { class: "sub", text: "Safari로 아래 주소를 열고 공유 버튼 → '홈 화면에 추가'를 누르면 앱처럼 쓸 수 있습니다. 코드로 들어왔다면 먼저 위 '이메일 연결'을 하고, 아이폰에서는 '이메일로 로그인'으로 들어오세요." }),
+      h("div", { class: "codebox" }, h("span", { class: "code", style: "font-size:14px;letter-spacing:0", text: APP.webUrl }),
+        h("button", { class: "btn small", type: "button", text: "주소 복사", onclick: async (e) => { try { await navigator.clipboard.writeText(APP.webUrl); e.target.textContent = "복사했습니다"; } catch (err) { e.target.textContent = "길게 눌러 선택하세요"; } } }))) : null;
+
     const account = h("section", { class: "box" }, h("h2", {}, "계정과 서버"),
       h("dl", { class: "kv" },
-        h("dt", { text: "계정" }), h("dd", { text: APP.isAnon ? "코드로 들어온 계정 (이 PC에만 저장)" : APP.email || "" }),
+        h("dt", { text: "계정" }), h("dd", { text: APP.isAnon ? "코드로 들어온 계정 (이 기기에만 저장)" : APP.email || "" }),
         h("dt", { text: "서버" }), h("dd", { text: (APP.serverUrl || "").replace(/^https:\/\//, "") }),
         h("dt", { text: "실시간" }), h("dd", { text: APP.live ? "연결됨" : "다시 연결하는 중" }),
         h("dt", { text: "앱 버전" }), h("dd", { text: APP.version || "-" })),
@@ -394,7 +565,7 @@ NEW_VIEWS = r'''
       S.confirmLogout ? h("div", { class: "notice" }, APP.isAnon ? "코드로 들어온 계정은 로그아웃하면 다시 들어올 수 없습니다. 코드를 다시 넣으면 새 사람으로 들어가고, PM이 팀원 탭의 '기록 옮기기'로 이전 기록을 옮겨 줘야 합니다." : "로그아웃합니다. 이메일과 비밀번호로 다시 들어올 수 있습니다.",
         h("div", { class: "actions", style: "margin-top:8px" }, h("button", { class: "btn small danger", type: "button", text: "로그아웃", onclick: () => APP.signOut() }), h("button", { class: "btn small", type: "button", text: "취소", onclick: () => { S.confirmLogout = false; render(); } })))
         : h("div", { class: "actions" }, h("button", { class: "btn", type: "button", text: "로그아웃", onclick: () => { S.confirmLogout = true; render(); } })));
-    return [pageHead("설정", "화면 모드와 키 컬러는 이 PC에만 저장됩니다."), looks, profile, projects, agentBox, account];
+    return [pageHead("설정", "화면 모드, 키 컬러, 알림은 이 기기에만 저장됩니다."), link, looks, alerts, profile, projects, mobile, agentBox, account];
   }
 
   function agentSettings() {
@@ -418,16 +589,20 @@ NEW_VIEWS = r'''
         const mem = {}; f.members.value.split(/[,\n]/).forEach((pair) => { const [n, r] = pair.split("=").map((x) => (x || "").trim()); if (n && ["PM", "기획", "디자인", "촬영", "편집"].includes(r)) mem[n] = r; });
         const projectsKw = {}; APP.projects.forEach((p) => { projectsKw[p.name] = [p.name, ...p.name.split(/\s+/).filter((w) => w.length >= 2)]; });
         const patch = { rooms: rs, room_projects: rp, members: mem, interval_sec: Number(f.interval.value), projects: projectsKw, llm: { ...(c.llm || {}), enabled: f.llm.checked } };
+        if (f.macdir) { patch.mac_export_dir = f.macdir.value.trim() || c.mac_export_dir; patch.mac_live = !!(f.maclive && f.maclive.checked); }
         lsSet("oddhr.autoscan", f.auto.checked ? "1" : "0");
         appAct("settings", async () => { const r = await APP.agent(["config-set", JSON.stringify(patch)]); S.agentCfg = r.config; if (S.pc.status) S.pc.status.interval_sec = r.config.interval_sec; if (pullTimer) { clearInterval(pullTimer); pullTimer = null; } startAutoPull(); }, "카톡 에이전트 설정을 저장했습니다.");
       } },
-        h("label", { class: "field wide" }, "감시할 대화방 (쉼표로 구분, 카톡 창 제목 그대로)", h("input", { id: "rooms", name: "rooms", value: rooms.join(", "), placeholder: "예: 양천경찰서 영상팀, 공모전 팀방" })),
+        APP.platform === "darwin" ? h("div", { class: "notice wide" }, "Mac 카카오톡은 대화를 바깥 프로그램에 바로 내주지 않습니다. 대화방 → 메뉴(≡) → '대화 내용 내보내기' → '텍스트로 저장'한 파일을 아래 폴더에 넣어 두면 점검할 때마다 새 메시지만 읽어 할 일을 제안합니다. 같은 방을 다시 내보내 덮어써도 이미 본 메시지는 건너뜁니다.") : null,
+        APP.platform === "darwin" ? h("label", { class: "field wide" }, "카톡 내보내기 폴더", h("span", { style: "display:flex;gap:8px" }, h("input", { id: "macdir", name: "macdir", value: c.mac_export_dir || "", style: "flex:1" }), h("button", { class: "btn small", type: "button", text: "폴더 열기", onclick: () => window.oddhr && window.oddhr.openFolder && window.oddhr.openFolder(($("macdir") || {}).value || c.mac_export_dir) }))) : null,
+        APP.platform === "darwin" ? h("label", { class: "field wide" }, h("span", { text: "열린 대화방 창 직접 읽기 (실험)" }), h("span", { style: "display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px" }, h("input", { class: "toggle", type: "checkbox", id: "maclive", name: "maclive", checked: !!c.mac_live }), "점검할 때 카카오톡을 잠깐 앞으로 가져와 열린 창을 복사해 읽습니다. '손쉬운 사용' 권한이 필요하고, 그 순간 타자가 카톡으로 갈 수 있습니다.")) : null,
+        h("label", { class: "field wide" }, APP.platform === "darwin" ? "감시할 대화방 (쉼표로 구분, 내보낸 파일 첫 줄이나 창 제목의 대화방 이름)" : "감시할 대화방 (쉼표로 구분, 카톡 창 제목 그대로)", h("input", { id: "rooms", name: "rooms", value: rooms.join(", "), placeholder: "예: 양천경찰서 영상팀, 공모전 팀방" })),
         rooms.map((r, i) => h("label", { class: "field" }, `'${r}' 방의 프로젝트`, h("select", { id: `rp-${i}`, name: `rp-${i}` }, pmProjects.map((p) => { const o = h("option", { value: p.name, text: p.name }); if ((c.room_projects || {})[r] === p.name) o.selected = true; return o; })))),
         h("label", { class: "field" }, "점검 간격", h("select", { id: "interval", name: "interval" }, [[60, "1분"], [180, "3분"], [300, "5분"], [600, "10분"], [1800, "30분"]].map(([v, l]) => { const o = h("option", { value: String(v), text: l }); if (Number(c.interval_sec || 180) === v) o.selected = true; return o; }))),
         h("label", { class: "field" }, h("span", { text: "자동 점검" }), h("span", { style: "display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px" }, h("input", { class: "toggle", type: "checkbox", id: "auto", name: "auto", checked: lsGet("oddhr.autoscan") !== "0" }), "앱이 켜져 있으면 간격마다 점검")),
         h("label", { class: "field wide" }, "팀원 카톡 이름=역할 (담당 역할을 맞히는 데 씀)", h("textarea", { id: "members", name: "members", style: "min-height:60px", value: membersText, placeholder: "홍길동=편집, 김철수=촬영" })),
         h("label", { class: "field wide" }, h("span", { text: "로컬 모델 (선택)" }), h("span", { style: "display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px" }, h("input", { class: "toggle", type: "checkbox", id: "llm", name: "llm", checked: !!(c.llm && c.llm.enabled) }), `애매한 메시지만 이 PC의 Ollama(${(c.llm && c.llm.model) || "exaone3.5:7.8b"})로 다시 판정`)),
-        h("label", { class: "field wide" }, h("span", { text: "컴퓨터를 켤 때" }), h("span", { style: "display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px" }, h("input", { class: "toggle", type: "checkbox", id: "atlogin", checked: !!APP.openAtLogin, onchange: async (e) => { if (APP.setLoginItem) APP.openAtLogin = await APP.setLoginItem(e.target.checked); } }), "ODD HR을 창 없이 자동으로 켜서 카톡 점검 시작")),
+        h("label", { class: "field wide" }, h("span", { text: "컴퓨터를 켤 때" }), h("span", { style: "display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px" }, h("input", { class: "toggle", type: "checkbox", id: "atlogin", checked: !!APP.openAtLogin, onchange: async (e) => { if (APP.setLoginItem) APP.openAtLogin = await APP.setLoginItem(e.target.checked); } }), APP.platform === "darwin" ? "로그인할 때 ODD HR을 창 없이 켜서 카톡 점검 시작" : "ODD HR을 창 없이 자동으로 켜서 카톡 점검 시작")),
         h("div", { class: "actions wide" }, h("button", { class: "btn primary", type: "submit", text: "저장" }), checkNowBtn())));
   }
 '''
@@ -442,7 +617,7 @@ html = f"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in wss://*.supabase.in;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' https://gmail.googleapis.com https://*.supabase.co wss://*.supabase.co https://*.supabase.in wss://*.supabase.in;">
 <title>ODD HR</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
 <style>

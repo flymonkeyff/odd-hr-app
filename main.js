@@ -24,7 +24,7 @@ function serverConfig() {
   const bundled = readJson(path.join(__dirname, "app-config.json")) || {};
   const user = readJson(userCfgPath()) || {};
   const pick = (k) => (user[k] || bundled[k] || process.env[k === "url" ? "ODDHR_SUPABASE_URL" : "ODDHR_SUPABASE_ANON_KEY"] || "").trim();
-  return { url: pick("url"), anonKey: pick("anonKey") };
+  return { url: pick("url"), anonKey: pick("anonKey"), webUrl: String(bundled.webUrl || "").trim() };
 }
 
 // ---------------------------------------------------------------- 카톡 에이전트
@@ -33,8 +33,8 @@ function agentCommand() {
     const parts = process.env.ODDHR_AGENT_CMD.split(" ");
     return { file: parts[0], pre: parts.slice(1) };
   }
-  if (!IS_WIN) return null;
-  const exe = path.join(process.resourcesPath || "", "agent", "odd-hr-agent.exe");
+  if (!IS_WIN && !IS_MAC) return null;
+  const exe = path.join(process.resourcesPath || "", "agent", IS_WIN ? "odd-hr-agent.exe" : "odd-hr-agent");
   return fs.existsSync(exe) ? { file: exe, pre: [] } : null;
 }
 const AGENT = agentCommand();
@@ -43,7 +43,7 @@ let agentQueue = Promise.resolve();
 function runAgent(args) {
   // 한 번에 하나씩 (카톡 창과 클립보드를 동시에 쓰지 않게)
   const job = () => new Promise((resolve) => {
-    if (!AGENT) return resolve({ ok: false, error: "이 PC에는 카톡 에이전트가 없습니다 (Windows PM 전용)." });
+    if (!AGENT) return resolve({ ok: false, error: "이 컴퓨터에는 카톡 에이전트가 없습니다 (Windows, Mac 앱에 들어 있음)." });
     if (!Array.isArray(args) || !ALLOWED.has(args[0]) || args.some((a) => typeof a !== "string" || a.length > 20000)) return resolve({ ok: false, error: "허용하지 않는 명령입니다." });
     execFile(AGENT.file, [...AGENT.pre, "--json", ...args], { windowsHide: true, timeout: 120000, maxBuffer: 16 * 1024 * 1024, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" } }, (err, stdout, stderr) => {
       const line = String(stdout || "").trim().split(/\r?\n/).pop() || "";
@@ -115,6 +115,32 @@ ipcMain.on("oddhr:save-config", (e, c) => {
 });
 ipcMain.handle("oddhr:agent", (e, args) => runAgent(args));
 ipcMain.handle("oddhr:set-login", (e, on) => { app.setLoginItemSettings({ openAtLogin: !!on, args: ["--hidden"] }); return app.getLoginItemSettings().openAtLogin; });
+// 구글 로그인(Gmail 연결): 앱 안의 작은 창에서 구글 화면을 열고, 돌아오는 주소(코드)만 화면에 돌려준다.
+// 창에는 preload가 없고, 구글·Supabase 주소 밖으로는 못 나간다.
+ipcMain.handle("oddhr:oauth", (e, { url, back }) => new Promise((resolve) => {
+  const okStart = /^https:\/\/[a-z0-9-]+\.supabase\.(co|in)\/auth\/v1\/authorize\?/.test(String(url || ""));
+  if (!okStart || !/^https:\/\//.test(String(back || ""))) return resolve({ ok: false, error: "허용하지 않는 로그인 주소입니다." });
+  const w = new BrowserWindow({ width: 520, height: 720, parent: win || undefined, modal: !!win, title: "Google 로그인", autoHideMenuBar: true,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, partition: "oddhr-oauth" } });
+  let done = false;
+  const finish = (r) => { if (done) return; done = true; resolve(r); if (!w.isDestroyed()) w.close(); };
+  const watch = (ev, u) => {
+    if (String(u).startsWith(back)) { ev.preventDefault(); finish({ ok: true, url: String(u) }); return; }
+    if (!/^https:\/\/(accounts\.google\.com|[a-z0-9-]+\.supabase\.(co|in)|accounts\.youtube\.com|www\.google\.com)\//.test(String(u))) { ev.preventDefault(); }
+  };
+  w.webContents.on("will-redirect", watch);
+  w.webContents.on("will-navigate", watch);
+  w.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  w.on("closed", () => finish({ ok: false, error: "로그인 창을 닫았습니다." }));
+  w.loadURL(url);
+}));
+// Mac 카톡 내보내기 폴더 열기 (홈 폴더 안만)
+ipcMain.handle("oddhr:open-folder", async (e, dir) => {
+  const p = path.resolve(String(dir || "").replace(/^~(?=\/|$)/, app.getPath("home")));
+  if (!p.startsWith(app.getPath("home"))) return false;
+  fs.mkdirSync(p, { recursive: true });
+  return (await shell.openPath(p)) === "";
+});
 ipcMain.on("oddhr:set-theme", (e, t) => { nativeTheme.themeSource = ["light", "dark"].includes(t) ? t : "system"; });
 ipcMain.handle("oddhr:notify", (e, { title, body }) => { if (Notification.isSupported()) new Notification({ title: String(title || "ODD HR").slice(0, 80), body: String(body || "").slice(0, 240) }).show(); });
 
@@ -123,7 +149,7 @@ app.whenReady().then(() => {
   createTray();
   // 카톡 에이전트가 있는 PC는 처음 한 번 로그인할 때 자동 시작을 켠다 (설정에서 끌 수 있음)
   const flag = path.join(app.getPath("userData"), "login-item-set");
-  if (AGENT && !fs.existsSync(flag)) { app.setLoginItemSettings({ openAtLogin: true, args: ["--hidden"] }); try { fs.writeFileSync(flag, "1"); } catch (e) {} }
+  if (AGENT && IS_WIN && !fs.existsSync(flag)) { app.setLoginItemSettings({ openAtLogin: true, args: ["--hidden"] }); try { fs.writeFileSync(flag, "1"); } catch (e) {} }
   app.on("activate", showWindow);
 });
 app.on("before-quit", () => { quitting = true; });

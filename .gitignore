@@ -4,3 +4,4 @@ agent-dist/
 app/vendor/
 *.log
 __pycache__/
+/web/

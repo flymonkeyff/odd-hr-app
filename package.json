@@ -1,8 +1,8 @@
 {
   "name": "odd-hr",
   "productName": "ODD HR",
-  "version": "0.1.0",
-  "description": "ODD HR: 팀 AX 데스크톱 앱 (아침상, 작업, 할 일, 목표, 미팅, 팀원, 카톡 에이전트)",
+  "version": "0.2.0",
+  "description": "ODD HR: 팀 AX 앱 (아침상, 알림, 작업, 할 일, 메시지, 드라이브, 미팅·회의록, 목표, 팀원, 카톡 에이전트)",
   "author": "ODD",
   "license": "UNLICENSED",
   "private": true,
@@ -14,14 +14,17 @@
     "test:server": "node server/test/run.js",
     "test:e2e": "node test/e2e.js",
     "dist:win": "npm run vendor && electron-builder --win --x64 --publish never",
-    "dist:mac": "npm run vendor && electron-builder --mac --universal --publish never"
+    "dist:mac": "npm run vendor && electron-builder --mac --universal --publish never",
+    "web": "npm run vendor && node tools/build_web.js",
+    "verify": "node tools/verify_release.js"
   },
   "devDependencies": {
     "@supabase/supabase-js": "2.45.4",
     "electron": "31.7.7",
     "electron-builder": "24.13.3",
     "@electric-sql/pglite": "0.2.12",
-    "playwright": "1.48.2"
+    "playwright": "1.48.2",
+    "@electron/asar": "3.4.1"
   },
   "build": {
     "appId": "kr.oddhr.app",
@@ -47,7 +50,8 @@
         "from": "agent-dist",
         "to": "agent",
         "filter": [
-          "odd-hr-agent.exe"
+          "odd-hr-agent.exe",
+          "odd-hr-agent"
         ]
       }
     ],

@@ -9,5 +9,7 @@ contextBridge.exposeInMainWorld("oddhr", {
   setLoginItem: (on) => ipcRenderer.invoke("oddhr:set-login", on),
   setTheme: (t) => ipcRenderer.send("oddhr:set-theme", t),
   notify: (title, body) => ipcRenderer.invoke("oddhr:notify", { title, body }),
-  onCheckNow: (fn) => ipcRenderer.on("oddhr:check-now", () => fn())
+  onCheckNow: (fn) => ipcRenderer.on("oddhr:check-now", () => fn()),
+  oauth: (url, back) => ipcRenderer.invoke("oddhr:oauth", { url, back }),
+  openFolder: (dir) => ipcRenderer.invoke("oddhr:open-folder", dir)
 });

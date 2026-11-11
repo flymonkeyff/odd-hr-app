@@ -34,7 +34,13 @@ except ImportError:  # 개발용 단독 실행
     from oddhr_extract import classify, dedupe_key, parse_kakao_date, project_for, urgency_for, find_due  # type: ignore
     from oddhr_llm import LocalModel  # type: ignore
 
-HOME = Path(os.environ.get("ODD_HR_HOME") or (Path(os.environ.get("LOCALAPPDATA", Path.home())) / "ODD-HR"))
+def _default_home() -> Path:
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "ODD-HR-agent"
+    return Path(os.environ.get("LOCALAPPDATA", Path.home())) / "ODD-HR"
+
+
+HOME = Path(os.environ.get("ODD_HR_HOME") or _default_home())
 CONFIG = HOME / "config.json"
 DB = HOME / "agent.db"
 OUTBOX = HOME / "outbox"
@@ -51,6 +57,9 @@ DEFAULT_CONFIG = {
     "keep_outbox": 14,
     "interval_sec": 180,
     "room_projects": {},
+    # Mac: 카톡 '대화 내보내기' 파일을 넣어 두면 자동으로 읽는 폴더, 열린 대화방 창을 직접 읽기(실험)
+    "mac_export_dir": str(Path.home() / "Documents" / "ODD HR 카톡"),
+    "mac_live": False,
 }
 AMBIGUOUS = {"할 일 신호 없음", "질문만 있음", "제안이지 확정 아님"}
 
@@ -223,6 +232,8 @@ def _scan(rooms: list[str] | None, messages_by_room: dict[str, list[dict]] | Non
                     from . import kakao  # Windows 전용
                 except ImportError:
                     from kakaotalk_mcp import kakao  # type: ignore
+                if hasattr(kakao, "configure"):
+                    kakao.configure(cfg)          # Mac: 내보내기 폴더, 실시간 읽기 설정
                 if room not in kakao.list_chat_windows():
                     kakao.open_chat(room)
                 msgs = kakao.read_messages(room, 0)
@@ -392,7 +403,7 @@ def watch(interval: int | None = None, max_rounds: int | None = None) -> int:
     return 0
 
 
-CONFIG_KEYS = {"rooms", "members", "projects", "llm", "interval_sec", "room_projects", "keep_outbox"}
+CONFIG_KEYS = {"rooms", "members", "projects", "llm", "interval_sec", "room_projects", "keep_outbox", "mac_export_dir", "mac_live"}
 
 
 def json_command(cmd: str, args: list[str]) -> dict:

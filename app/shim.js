@@ -7,7 +7,8 @@
 (() => {
   "use strict";
   const native = window.oddhr || {};
-  const cfg = (native.config && native.config()) || {};
+  // 데스크톱 앱은 메인 프로세스가, 웹(아이폰·아이패드)은 config.js가 서버 정보를 준다
+  const cfg = (native.config && native.config()) || window.ODDHR_WEB_CONFIG || {};
   const ROLES_JOIN = ["기획", "디자인", "촬영", "편집", "PM"];
 
   // ---------------------------------------------------------------- 화면 설정
@@ -30,11 +31,13 @@
     if (native.setTheme) native.setTheme(prefs.theme);
   }
   applyPrefs();
+  // Mac 앱: 창 왼쪽 위 신호등 버튼(닫기·최소화·확대) 자리만큼 메뉴를 내리고, 위쪽을 잡아 끌 수 있게
+  if (cfg.platform === "darwin") document.documentElement.classList.add("mac-app");
 
   // ---------------------------------------------------------------- 서버
   const hasSdk = typeof window.supabase !== "undefined" && window.supabase.createClient;
   const sb = cfg.url && cfg.anonKey && hasSdk ? window.supabase.createClient(cfg.url, cfg.anonKey, {
-    auth: { persistSession: true, autoRefreshToken: true, storageKey: "oddhr-auth" },
+    auth: { persistSession: true, autoRefreshToken: true, storageKey: "oddhr-auth", flowType: "pkce", detectSessionInUrl: true },
     realtime: { params: { eventsPerSecond: 10 } }
   }) : null;
 
@@ -49,6 +52,7 @@
     emit() { App.listeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } }); },
     platform: cfg.platform || "", version: cfg.version || "", serverUrl: cfg.url || "",
     agentAvailable: !!cfg.agentAvailable,
+    webUrl: cfg.webUrl || "",
     openAtLogin: !!cfg.openAtLogin,
     setLoginItem: native.setLoginItem ? (on) => native.setLoginItem(on) : null
   };
@@ -62,6 +66,10 @@
     if (/Anonymous sign-ins are disabled/i.test(msg)) return "서버에서 '익명 로그인'이 꺼져 있습니다. PM에게 설정 안내의 2단계를 확인해 달라고 하세요.";
     if (/User already registered/i.test(msg)) return "이미 있는 계정입니다. 로그인을 누르세요.";
     if (/Password should be/i.test(msg)) return "비밀번호는 6자 이상이어야 합니다.";
+    if (/docs_collection_check|Bucket not found/i.test(msg)) return "팀 서버가 예전 버전입니다. PM이 서버 업데이트를 한 번 실행해야 합니다 (설치 안내의 '서버 업데이트').";
+    if (/maximum allowed size|Payload too large|too large/i.test(msg)) return "50MB가 넘는 파일은 올릴 수 없습니다. 구글 드라이브 등에 올리고 링크로 등록하세요.";
+    if (/already been registered|already registered/i.test(msg)) return "이미 쓰는 이메일입니다.";
+    if (/row-level security/i.test(msg)) return "권한이 없습니다.";
     return msg.replace(/^.*?:\s*/, "") || "알 수 없는 오류가 났습니다.";
   };
   const asErr = (e) => ({ code: "local", message: friendly(e) });
@@ -130,10 +138,11 @@
   const rows = new Map();               // id → {id, project_id, collection, data, owner}
   const subs = [];                      // {collection, fn}
   const colName = (path) => (/^data\/users\//.test(path) ? "quick" : path);
+  const ALL_COLS = ["tasks", "goals", "meetings", "flags", "quick", "messages", "files", "weekly"];
   const snap = (collection) => ({
     docs: [...rows.values()].filter((r) => r.collection === collection).map((r) => ({
       id: r.id, exists: true, metadata: { fromCache: false },
-      data: () => ({ ...r.data, "프로젝트": App.projectName(r.project_id) || r.data["프로젝트"] || "" })
+      data: () => ({ ...r.data, "프로젝트": App.projectName(r.project_id) || r.data["프로젝트"] || "", _owner: r.owner, _pid: r.project_id, _at: r.created_at })
     })),
     metadata: { fromCache: false }
   });
@@ -147,7 +156,7 @@
       subs.forEach((s) => { if (cols.includes(s.collection)) { try { s.fn(snap(s.collection)); } catch (e) { console.error(e); } } });
     }, 30);
   }
-  const strip = (data) => { const d = { ...data }; delete d["프로젝트"]; delete d.url; return d; };
+  const strip = (data) => { const d = { ...data }; delete d["프로젝트"]; delete d.url; Object.keys(d).forEach((k) => { if (k[0] === "_") delete d[k]; }); return d; };
   const pickProject = (data, fallback) => App.projectId(data && data["프로젝트"]) || fallback || App.currentProject || (App.projects[0] || {}).id;
   const newId = () => "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const cleanId = (id) => String(id).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 80);
@@ -160,7 +169,7 @@
       (data || []).forEach((r) => rows.set(r.id, r));
       if (!data || data.length < 1000) break;
     }
-    ["tasks", "goals", "meetings", "flags", "quick"].forEach(emitCol);
+    ALL_COLS.forEach(emitCol);
   }
   let channel = null;
   function listen() {
@@ -229,6 +238,86 @@
     }
   };
   App.db = db;
+
+  // ---------------------------------------------------------------- 드라이브 파일 (저장소 버킷 oddhr, 경로: <프로젝트>/<문서 id>.<확장자>)
+  const BUCKET = "oddhr";
+  App.files = {
+    max: 50 * 1024 * 1024,
+    async upload(pid, path, file) {
+      const { error } = await sb.storage.from(BUCKET).upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
+      if (error) throw asErr(error);
+    },
+    async blob(path) {
+      const { data, error } = await sb.storage.from(BUCKET).download(path);
+      if (error) throw asErr(error);
+      return data;
+    },
+    async remove(path) {
+      const { error } = await sb.storage.from(BUCKET).remove([path]);
+      if (error) throw asErr(error);
+    }
+  };
+  // 알림 (데스크톱 앱은 운영체제 알림, 웹은 화면 안 알림만)
+  App.notify = (title, body) => {
+    try {
+      if (native.notify) { native.notify(title, body); return; }
+      // 웹: 브라우저가 알림을 허용했을 때만 (아이폰 Safari는 화면 안 배지와 알림 칸으로만 보인다)
+      if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.visibilityState === "hidden") new Notification(title, { body, icon: "icons/icon-192.png" });
+    } catch (e) {}
+  };
+  // ---------------------------------------------------------------- 구글 로그인과 Gmail (읽기 전용)
+  // Supabase에 Google 로그인이 켜져 있어야 한다 (설치-안내.md의 'Google 연결'). 돌아올 주소는 웹 앱 주소.
+  const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+  const back = () => (cfg.webUrl || (location.protocol === "https:" ? location.origin + location.pathname : "")).replace(/#.*$/, "");
+  App.gmailAvailable = !!(cfg.url && (cfg.webUrl || location.protocol === "https:"));
+  const GKEY = "oddhr.gmail";
+  const keepToken = (session) => {
+    if (!session || !session.provider_token) return;
+    const exp = Date.now() + 55 * 60 * 1000;
+    const ids = (session.user && session.user.identities) || [];
+    const g = ids.find((i) => i.provider === "google");
+    try { localStorage.setItem(GKEY, JSON.stringify({ t: session.provider_token, exp, email: (g && g.identity_data && g.identity_data.email) || "" })); } catch (e) {}
+  };
+  const readG = () => { try { const g = JSON.parse(localStorage.getItem(GKEY) || "null"); return g && g.exp > Date.now() ? g : null; } catch (e) { return null; } };
+  App.gmailToken = () => (readG() || {}).t || "";
+  App.gmailEmail = () => (readG() || {}).email || "";
+  App.gmailForget = () => { try { localStorage.removeItem(GKEY); } catch (e) {} App.emit(); };
+  async function oauthRun(getUrl) {
+    const redirectTo = back();
+    if (!redirectTo) throw { code: "local", message: "돌아올 웹 주소가 설정되지 않았습니다." };
+    const { data, error } = await getUrl(redirectTo);
+    if (error) throw asErr(/not enabled|Unsupported provider/i.test(error.message || "") ? { message: "팀 서버에서 Google 로그인이 아직 꺼져 있습니다. PM이 설치 안내의 'Google 연결'을 한 번 해야 합니다." } : /Manual linking is disabled/i.test(error.message || "") ? { message: "팀 서버에서 계정 연결(Manual linking)이 꺼져 있습니다. 설치 안내의 'Google 연결' 3단계를 확인하세요." } : error);
+    if (!native.oauth) { location.href = data.url; return new Promise(() => {}); }        // 웹: 구글로 갔다가 돌아오면 아래 onAuthStateChange가 이어 받는다
+    const r = await native.oauth(data.url, redirectTo);
+    if (!r || !r.ok) throw { code: "local", message: (r && r.error) || "로그인하지 못했습니다." };
+    const u = new URL(r.url), code = u.searchParams.get("code"), err = u.searchParams.get("error_description") || new URLSearchParams(u.hash.slice(1)).get("error_description");
+    if (err) throw { code: "local", message: friendly({ message: err }) };
+    if (!code) throw { code: "local", message: "구글에서 돌아온 값이 없습니다. 다시 시도하세요." };
+    const { data: d2, error: e2 } = await sb.auth.exchangeCodeForSession(code);
+    if (e2) throw asErr(e2);
+    keepToken(d2.session);
+    return d2.session;
+  }
+  App.gmailConnect = async () => {
+    const opts = (redirectTo) => ({ provider: "google", options: { redirectTo, scopes: GMAIL_SCOPE, skipBrowserRedirect: true, queryParams: { access_type: "offline", prompt: "consent" } } });
+    const ids = ((App.session && App.session.user && App.session.user.identities) || []).map((i) => i.provider);
+    // 이미 구글로 들어온 계정이면 다시 로그인만, 아니면 지금 계정에 구글을 연결한다 (같은 사람으로 남는다)
+    await oauthRun((redirectTo) => ids.includes("google") ? sb.auth.signInWithOAuth(opts(redirectTo)) : sb.auth.linkIdentity(opts(redirectTo)));
+    App.emit();
+  };
+  App.googleLogin = async () => {
+    const s2 = await oauthRun((redirectTo) => sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo, scopes: GMAIL_SCOPE, skipBrowserRedirect: true } }));
+    if (s2) { App.session = s2; await start(); }
+  };
+  if (sb && sb.auth.onAuthStateChange) sb.auth.onAuthStateChange((ev, session) => { if (session && session.provider_token) { keepToken(session); App.emit(); } });
+  App.askNotify = async () => { try { if (typeof Notification !== "undefined" && Notification.permission === "default") await Notification.requestPermission(); } catch (e) {} };
+  // 코드로 들어온 계정에 이메일을 연결하면 다른 기기(아이폰, 아이패드, 다른 PC)에서 같은 사람으로 로그인할 수 있다
+  App.linkEmail = async (email, password) => {
+    const { data, error } = await sb.auth.updateUser({ email, password });
+    if (error) throw asErr(error);
+    const u = (data && data.user) || {};
+    App.email = u.email || email; App.isAnon = false; App.emit();
+  };
 
   // ---------------------------------------------------------------- claude.use 모양 (desk.js 호환)
   const user = {
@@ -332,7 +421,7 @@
           await start();
         } catch (err) { m.textContent = (err && err.message) ? friendly(err) : "들어가지 못했습니다."; busy(go, false, "들어가기"); }
       } }, field("프로젝트 코드", code), field("내 이름", name), field("내 역할", role), m, el("div", { class: "gate-actions" }, go)),
-      el("div", { class: "gate-alt" }, el("span", { text: "PM이신가요?" }), el("button", { class: "linkish", type: "button", text: "이메일로 로그인", onclick: screenPmLogin })));
+      el("div", { class: "gate-alt" }, el("span", { text: "PM이거나 이미 계정이 있나요?" }), el("button", { class: "linkish", type: "button", text: "이메일로 로그인", onclick: screenPmLogin })));
   }
 
   function screenPmLogin() {
@@ -351,7 +440,7 @@
         App.session = data.session; await start();
       } catch (err) { m.textContent = friendly(err); busy(signup, false, "PM 계정 만들기"); }
     });
-    frame("PM 로그인", "프로젝트를 만들고 코드를 나눠 주는 PM 계정입니다. 팀원은 이메일 없이 코드로만 들어옵니다.",
+    frame("이메일로 로그인", "PM 계정이거나, 설정에서 이메일을 연결해 둔 팀원 계정으로 들어갑니다. 처음인 팀원은 이메일 없이 코드로 들어오면 됩니다.",
       el("form", { class: "gate-form", onsubmit: async (e) => {
         e.preventDefault();
         busy(login, true, "로그인 중");
@@ -361,6 +450,7 @@
           App.session = data.session; await start();
         } catch (err) { m.textContent = friendly(err); busy(login, false, "로그인"); }
       } }, field("이메일", email), field("비밀번호", pw), m, el("div", { class: "gate-actions" }, login, signup)),
+      App.gmailAvailable ? el("div", { class: "gate-actions" }, el("button", { class: "btn google", type: "button", text: "Google로 계속", onclick: async (e) => { const b = e.currentTarget; busy(b, true, "구글 로그인 중"); try { await App.googleLogin(); } catch (err) { m.textContent = (err && err.message) || "로그인하지 못했습니다."; busy(b, false, "Google로 계속"); } } })) : null,
       el("div", { class: "gate-alt" }, el("button", { class: "linkish", type: "button", text: "← 코드로 시작하기", onclick: screenWelcome })));
   }
 

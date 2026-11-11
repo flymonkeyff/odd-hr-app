@@ -1,9 +1,9 @@
-# ODD HR 설치 파일 만들기 (Windows .exe, Mac .dmg)
-# - Actions 탭 → "ODD HR 빌드" → Run workflow 를 누르거나, v0.1.0 같은 태그를 올리면 돈다.
-# - 저장소 Settings → Secrets and variables → Actions 에 두 값을 넣으면 설치 파일에 팀 서버가 들어간다.
-#     ODDHR_SUPABASE_URL       예: https://abcd1234.supabase.co
-#     ODDHR_SUPABASE_ANON_KEY  Supabase → Project Settings → API → anon public 키
-#   넣지 않으면 첫 실행 때 "팀 서버 연결" 화면이 나온다.
+# ODD HR 빌드와 배포
+#   1. 시험      서버 권한 시험(68개) + 앱 전체 흐름 시험(아이폰 화면 포함). 실패하면 아무것도 만들지 않는다.
+#   2. 만들기    Windows(압축, 설치형), Mac(Apple 실리콘, 인텔), 웹(아이폰·아이패드)
+#   3. 무결성    압축 CRC, 앱 안 파일 = 소스, 공개 키만, 칩 종류, SHA-256 목록. 실패하면 배포하지 않는다.
+#   4. 배포      Releases(다운로드 파일 + SHA256SUMS.txt), GitHub Pages(웹 앱 + 다운로드 페이지)
+# Actions 탭 → "ODD HR 빌드" → Run workflow 로 돌린다.
 name: ODD HR 빌드
 
 on:
@@ -13,10 +13,49 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: oddhr-build
+  cancel-in-progress: false
 
 jobs:
+  test:
+    name: 시험 (서버 권한, 앱 전체 흐름)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - name: 화면 파일이 소스와 맞는지 (tools/desk-source.html → app/)
+        run: |
+          python3 tools/build_ui.py
+          git diff --exit-code app/index.html app/desk.js || (echo "app/ 파일이 소스에서 다시 만든 것과 다릅니다. python3 tools/build_ui.py 후 커밋하세요." && exit 1)
+      - name: 서버 권한 시험
+        run: npm run test:server
+      - name: 앱 전체 흐름 시험 (PM, 팀원, 아이폰 화면)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run vendor
+          mkdir -p e2e-agent/kakaotalk_mcp
+          cp test/fake-kakao/kakaotalk_mcp/*.py e2e-agent/kakaotalk_mcp/
+          cp agent/oddhr_*.py e2e-agent/kakaotalk_mcp/
+          AGENT_DIR=$PWD/e2e-agent OUT_DIR=$PWD/e2e-shots npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 시험-화면
+          path: e2e-shots/*.png
+
   agent:
     name: 카톡 에이전트 (Windows 실행 파일)
+    needs: test
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,8 +92,53 @@ jobs:
           name: agent
           path: agent-dist/odd-hr-agent.exe
 
+  agent-mac:
+    name: 카톡 에이전트 (Mac ${{ matrix.arch }})
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - { arch: arm64, os: macos-latest }
+          - { arch: x64, os: macos-13 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 꾸러미 만들기 (Mac 읽기 모듈 + 같은 판정 엔진)
+        run: |
+          c=4cf1a996396edfbe5fa5e4acf368877a65abb0bb
+          curl -sSL "https://github.com/jjround/kakaotalk-mcp/archive/$c.tar.gz" | tar xz
+          mkdir -p kmac/kakaotalk_mcp
+          touch kmac/kakaotalk_mcp/__init__.py
+          cp "kakaotalk-mcp-$c/src/kakaotalk_mcp/parse.py" kmac/kakaotalk_mcp/
+          cp agent/kakao_mac.py kmac/kakaotalk_mcp/kakao.py
+          cp agent/oddhr_*.py kmac/kakaotalk_mcp/
+      - run: pip install pyinstaller==6.11.1
+      - name: 실행 파일 만들기
+        run: >
+          pyinstaller --onefile --console --name odd-hr-agent --paths kmac
+          --hidden-import kakaotalk_mcp.kakao --hidden-import kakaotalk_mcp.parse
+          --hidden-import kakaotalk_mcp.oddhr_agent --hidden-import kakaotalk_mcp.oddhr_extract --hidden-import kakaotalk_mcp.oddhr_llm
+          --distpath agent-dist agent/entry.py
+      - name: 실행 파일 시험 (내보낸 카톡 파일로 점검)
+        run: |
+          file agent-dist/odd-hr-agent
+          export ODD_HR_HOME=$PWD/agent-home
+          mkdir -p exp
+          printf '시험방 님과 카카오톡 대화\n--------------- 2026년 11월 10일 화요일 ---------------\n[홍길동] [오후 3:10] 편집본 v02 내일 오전까지 드라이브에 올릴게요\n' > exp/시험방.txt
+          ./agent-dist/odd-hr-agent --json config-set "{\"rooms\":[\"시험방\"],\"mac_export_dir\":\"$PWD/exp\"}" > /dev/null
+          out=$(./agent-dist/odd-hr-agent --json scan 시험)
+          echo "$out"
+          echo "$out" | grep -q '"tasks": 1' || (echo "Mac 에이전트가 내보낸 파일에서 할 일을 찾지 못했습니다" && exit 1)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-mac-${{ matrix.arch }}
+          path: agent-dist/odd-hr-agent
+
   windows:
-    name: Windows 설치 파일
+    name: Windows 앱
     needs: agent
     runs-on: windows-latest
     steps:
@@ -68,25 +152,16 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npm run dist:win
-        env:
-          ODDHR_SUPABASE_URL: ${{ secrets.ODDHR_SUPABASE_URL }}
-          ODDHR_SUPABASE_ANON_KEY: ${{ secrets.ODDHR_SUPABASE_ANON_KEY }}
-      - name: 파일 지문 (받은 파일이 온전한지 확인용)
-        shell: pwsh
-        run: Get-ChildItem dist -File | Where-Object { $_.Extension -in '.exe', '.zip' } | ForEach-Object { "{0}  {1}  {2}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash, $_.Length, $_.Name } | Tee-Object dist/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: ODD-HR-Windows
           path: |
             dist/*.exe
-            dist/SHA256.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ODD-HR-Windows-portable
-          path: dist/*-win.zip
+            dist/*-win.zip
 
   mac:
-    name: Mac 설치 파일
+    name: Mac 앱
+    needs: agent-mac
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,42 +169,70 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - name: 앱 만들기 (Intel + Apple 실리콘)
-        run: npm run vendor && npx electron-builder --mac --universal --dir --publish never
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-mac-arm64
+          path: agent-arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-mac-x64
+          path: agent-x64
+      - name: 칩별 앱 만들기 (각 칩에 맞는 카톡 에이전트를 넣는다)
+        run: |
+          npm run vendor
+          for a in arm64 x64; do
+            rm -rf agent-dist && mkdir agent-dist && cp agent-$a/odd-hr-agent agent-dist/ && chmod +x agent-dist/odd-hr-agent
+            npx electron-builder --mac --$a --dir --publish never
+          done
         env:
-          ODDHR_SUPABASE_URL: ${{ secrets.ODDHR_SUPABASE_URL }}
-          ODDHR_SUPABASE_ANON_KEY: ${{ secrets.ODDHR_SUPABASE_ANON_KEY }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: 칩별 앱 만들기 (Apple 실리콘, 인텔) - 파일 크기를 줄이려고 따로 만든다
-        run: npx electron-builder --mac --arm64 --x64 --dir --publish never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: 임시 서명, dmg와 zip 만들기
+      - name: 임시 서명, 서명 검증, zip
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          APP="$(ls -d dist/mac-universal/*.app | head -1)"
-          codesign --force --deep --sign - "$APP"
-          mkdir -p dmgroot && cp -R "$APP" dmgroot/ && ln -s /Applications dmgroot/Applications
-          hdiutil create -volname "ODD HR" -srcfolder dmgroot -ov -format UDZO "dist/ODD-HR-$VERSION-mac.dmg"
           for pair in "mac-arm64:apple-silicon" "mac:intel"; do
             dir="${pair%%:*}"; name="${pair##*:}"
             A="$(ls -d dist/$dir/*.app | head -1)"
+            codesign --force --sign - "$A/Contents/Resources/agent/odd-hr-agent"
             codesign --force --deep --sign - "$A"
+            codesign --verify --deep --strict --verbose=2 "$A"
             ditto -c -k --sequesterRsrc --keepParent "$A" "dist/ODD-HR-$VERSION-mac-$name.zip"
+            # 압축을 다시 풀어 서명이 그대로인지 확인
+            rm -rf "check-$name" && mkdir "check-$name" && ditto -x -k "dist/ODD-HR-$VERSION-mac-$name.zip" "check-$name"
+            codesign --verify --deep --strict "check-$name/$(basename "$A")"
           done
-          ls -la dist/*.dmg dist/*.zip
+          ls -la dist/*.zip
       - uses: actions/upload-artifact@v4
         with:
           name: ODD-HR-Mac
-          path: dist/*.dmg
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ODD-HR-Mac-zip
           path: dist/ODD-HR-*-mac-*.zip
 
-  release:
-    name: 다운로드 페이지(Releases)에 올리기
+  verify:
+    name: 무결성 검사
     needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run vendor
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          pattern: ODD-HR-*
+      - name: 검사 (하나라도 틀리면 배포 중단)
+        run: |
+          sudo apt-get install -y p7zip-full >/dev/null
+          node tools/verify_release.js out verified
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 검증된-배포-파일
+          path: verified/
+
+  release:
+    name: 다운로드 페이지(Releases)
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -137,23 +240,63 @@ jobs:
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
-          path: out
+          name: 검증된-배포-파일
+          path: verified
+      - name: 받은 파일을 한 번 더 대조
+        run: cd verified && sha256sum -c SHA256SUMS.txt
+      - name: 안내문
+        run: |
+          {
+            echo "## 받기"
+            echo "- **Windows**: \`ODD-HR-${{ steps.v.outputs.version }}-win.zip\`. 압축을 풀고 \`ODD HR.exe\` 실행 (권장). 설치형은 \`ODD-HR-Setup-${{ steps.v.outputs.version }}.exe\`"
+            echo "- **Mac (M1~M4)**: \`ODD-HR-${{ steps.v.outputs.version }}-mac-apple-silicon.zip\` · **Mac (인텔)**: \`ODD-HR-${{ steps.v.outputs.version }}-mac-intel.zip\`"
+            echo "- **아이폰 · 아이패드**: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/ 를 Safari로 열고 공유 → 홈 화면에 추가"
+            echo ""
+            echo "## 무결성 검사를 통과한 파일입니다"
+            echo "압축 CRC, 앱 안 파일과 소스 일치, 공개 키만 포함, Mac 서명과 칩 종류, 서버 권한 시험과 앱 전체 흐름 시험을 모두 통과했습니다."
+            echo "받은 파일은 https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/download.html 에 끌어다 놓으면 확인됩니다."
+            echo ""
+            echo "| 파일 | SHA-256 |"
+            echo "| --- | --- |"
+            while read -r h n; do echo "| $n | \`$h\` |"; done < verified/SHA256SUMS.txt
+            echo ""
+            echo "직접 확인: Windows \`Get-FileHash 파일 -Algorithm SHA256\` · Mac \`shasum -a 256 파일\`"
+          } > notes.md
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.v.outputs.version }}
           name: ODD HR ${{ steps.v.outputs.version }}
           make_latest: true
-          body: |
-            ## 받을 파일
-            - **Windows**: `ODD-HR-${{ steps.v.outputs.version }}-win.zip` — 압축을 풀고 `ODD HR.exe` 실행 (설치 과정 없음, 권장)
-              - 설치형이 필요하면 `ODD-HR-Setup-${{ steps.v.outputs.version }}.exe`
-            - **Mac (M1·M2·M3·M4)**: `ODD-HR-${{ steps.v.outputs.version }}-mac-apple-silicon.zip`
-            - **Mac (인텔)**: `ODD-HR-${{ steps.v.outputs.version }}-mac-intel.zip`
-
-            처음 실행할 때 경고가 뜨면: Windows는 **추가 정보 → 실행**, Mac은 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기**.
-            쓰는 법은 저장소의 [사용-가이드.md](../../blob/main/사용-가이드.md)를 보세요. 받은 파일이 온전한지는 `SHA256.txt`의 크기와 비교하세요.
+          body_path: notes.md
           files: |
-            out/ODD-HR-Windows/*.exe
-            out/ODD-HR-Windows/SHA256.txt
-            out/ODD-HR-Windows-portable/*.zip
-            out/ODD-HR-Mac-zip/*.zip
+            verified/*.zip
+            verified/*.exe
+            verified/SHA256SUMS.txt
+
+  web:
+    name: 웹 앱 (아이폰·아이패드)과 다운로드 페이지
+    needs: release
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: 검증된-배포-파일
+          path: verified
+      - name: 웹 앱 만들기 (스크립트마다 SRI 해시)
+        run: DOWNLOADS_DIR=verified npm run web
+      - name: 웹 파일 대조
+        run: cd web && sha256sum -c SHA256SUMS.txt
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deploy
+        uses: actions/deploy-pages@v4

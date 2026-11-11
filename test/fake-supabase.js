@@ -40,9 +40,16 @@
       async signInAnonymously() { const s = { user: { id: crypto.randomUUID(), is_anonymous: true } }; S.session = s; return { data: { session: s }, error: null }; },
       async signUp({ email, password }) { const u = users(); if (u[email]) return { data: {}, error: { message: "User already registered" } }; u[email] = { id: crypto.randomUUID(), pw: password }; localStorage.setItem("fake-users", JSON.stringify(u)); const s = { user: { id: u[email].id, email, is_anonymous: false } }; S.session = s; return { data: { session: s }, error: null }; },
       async signInWithPassword({ email, password }) { const u = users()[email]; if (!u || u.pw !== password) return { data: {}, error: { message: "Invalid login credentials" } }; const s = { user: { id: u.id, email, is_anonymous: false } }; S.session = s; return { data: { session: s }, error: null }; },
-      async signOut() { S.session = null; return { error: null }; }
+      async signOut() { S.session = null; return { error: null }; },
+      async updateUser({ email, password }) { const s = S.session; if (!s) return { data: {}, error: { message: "no session" } }; const u = users(); if (u[email]) return { data: {}, error: { message: "A user with this email address has already been registered" } }; u[email] = { id: s.user.id, pw: password }; localStorage.setItem("fake-users", JSON.stringify(u)); s.user = { ...s.user, email, is_anonymous: false }; S.session = s; return { data: { user: s.user }, error: null }; }
     },
     from: (t) => new Q(t),
+    // 파일 저장소 흉내: 내용은 시험 서버 쪽 메모리에 두고, 권한은 '그 프로젝트 멤버인가'로 확인한다
+    storage: { from: () => ({
+      async upload(p, file) { if (file.size > 52428800) return { error: { message: "The object exceeded the maximum allowed size" } }; const buf = Array.from(new Uint8Array(await file.arrayBuffer())); const r = await window.__store(claims(), "put", p, buf, file.type); return r.error ? { error: r.error } : { data: { path: p }, error: null }; },
+      async download(p) { const r = await window.__store(claims(), "get", p); return r.error ? { data: null, error: r.error } : { data: new Blob([new Uint8Array(r.bytes)], { type: r.type }), error: null }; },
+      async remove(ps) { const r = await window.__store(claims(), "del", ps[0]); return r.error ? { error: r.error } : { data: [], error: null }; }
+    }) },
     async rpc(fn, args) {
       const ks = Object.keys(args || {}); const ps = ks.map((k) => val(args[k]));
       const r = await run(`select public.${fn}(${ks.map((k, i) => `${k} => $${i + 1}`).join(", ")}) as r`, ps);

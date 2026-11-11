@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>ODD HR 받기</title>
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<style>
+:root { --bg: #ffffff; --grouped: #f2f2f7; --ink: #1d1d1f; --muted: #6e6e73; --sep: rgba(60,60,67,.18); --accent: #F15524; --on: #fff; --ok: #1f8a3d; --ok-soft: rgba(52,199,89,.14); --bad: #d70015; --bad-soft: rgba(255,59,48,.12); --shadow: 0 0 0 .5px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.05), 0 6px 20px rgba(0,0,0,.06); }
+@media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --grouped: #000; --ink: #f5f5f7; --muted: #a1a1a6; --sep: rgba(84,84,88,.6); --ok: #4ade80; --ok-soft: rgba(48,209,88,.2); --bad: #ff6961; --bad-soft: rgba(255,69,58,.2); --shadow: 0 0 0 .5px rgba(255,255,255,.08), 0 4px 16px rgba(0,0,0,.3); color-scheme: dark; } }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+a { color: var(--accent); }
+body { margin: 0; background: var(--grouped); color: var(--ink); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 32px max(16px, env(safe-area-inset-right)) 48px max(16px, env(safe-area-inset-left)); display: grid; gap: 18px; }
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo svg { height: 30px; fill: var(--accent); }
+.logo span { font-weight: 700; font-size: 24px; }
+h1 { margin: 6px 0 0; font-size: 30px; letter-spacing: -.02em; }
+h2 { margin: 0 0 4px; font-size: 18px; }
+p { margin: 0; }
+.sub { color: var(--muted); }
+.card { background: var(--bg); border-radius: 18px; padding: 20px; box-shadow: var(--shadow); display: grid; gap: 12px; }
+.card.pick { box-shadow: var(--shadow), inset 0 0 0 2px var(--accent); }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--grouped); color: var(--muted); margin-left: 6px; vertical-align: 2px; }
+.card.pick .tag { background: var(--accent); color: var(--on); }
+.files { display: grid; gap: 8px; }
+.file { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 14px; border-radius: 12px; background: var(--grouped); }
+.file b { font-size: 14.5px; overflow-wrap: anywhere; }
+.file code { grid-column: 1 / -1; font: 11.5px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--muted); overflow-wrap: anywhere; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 999px; padding: 9px 18px; font: inherit; font-weight: 600; background: var(--accent); color: var(--on); text-decoration: none; cursor: pointer; white-space: nowrap; }
+.btn.ghost { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.drop { border: 1.5px dashed var(--sep); border-radius: 14px; padding: 22px; text-align: center; cursor: pointer; color: var(--muted); }
+.drop.over { border-color: var(--accent); }
+.result { border-radius: 12px; padding: 12px 14px; font-weight: 600; }
+.result.ok { background: var(--ok-soft); color: var(--ok); }
+.result.bad { background: var(--bad-soft); color: var(--bad); }
+.result.wait { background: var(--grouped); color: var(--muted); }
+.mono { font: 12px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+pre { margin: 8px 0 0; padding: 12px; border-radius: 10px; background: var(--grouped); overflow-x: auto; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+.checks { display: grid; gap: 4px; padding-left: 0; list-style: none; margin: 0; }
+.checks li::before { content: "✓ "; color: var(--ok); font-weight: 700; }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo"><svg viewBox="0 0 201 128" aria-hidden="true"><circle cx="64" cy="64" r="64"/><path d="M106 0A64 64 0 0 1 106 128Z"/><path d="M169 8.57A64 64 0 0 1 169 119.43Z"/></svg><span>HR</span></div>
+  <div><h1>ODD HR 받기</h1><p class="sub" id="ver">버전 정보를 읽는 중</p></div>
+
+  <section class="card" id="verified">
+    <h2>이 파일들은 검증을 통과했습니다</h2>
+    <ul class="checks" id="checklist"></ul>
+  </section>
+
+  <section class="card" data-os="ios">
+    <h2>아이폰 · 아이패드 <span class="tag">설치 없음</span></h2>
+    <ol>
+      <li>Safari로 <a id="appurl" href="./">이 주소의 앱</a>을 엽니다.</li>
+      <li>아래쪽(아이패드는 위쪽) <b>공유 버튼</b> → <b>홈 화면에 추가</b>를 누릅니다.</li>
+      <li>홈 화면의 ODD HR 아이콘으로 엽니다. PC에서 코드로 들어왔다면 PC 앱의 <b>설정 → 이메일 연결</b>을 먼저 하고, 여기서는 <b>이메일로 로그인</b>으로 들어오세요.</li>
+    </ol>
+    <p class="sub">앱 화면 파일은 모두 해시(SRI)로 묶여 있어, 한 글자라도 바뀌면 열리지 않습니다.</p>
+    <div><a class="btn" href="./">앱 열기</a></div>
+  </section>
+
+  <section class="card" data-os="win">
+    <h2>Windows <span class="tag">권장</span></h2>
+    <div class="files" id="f-win"></div>
+    <p class="sub">압축을 풀고 <b>ODD HR.exe</b>를 실행합니다. "PC 보호" 창이 뜨면 <b>추가 정보 → 실행</b>. 받는 폴더가 구글 드라이브·OneDrive면 바탕 화면에 받으세요.</p>
+  </section>
+
+  <section class="card" data-os="mac">
+    <h2>Mac</h2>
+    <div class="files" id="f-mac"></div>
+    <p class="sub">칩은 애플 메뉴 → <b>이 Mac에 관하여</b>의 "칩"에서 확인합니다 (M1~M4면 Apple 실리콘). 처음 열 때 막히면 <b>시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기</b>.</p>
+  </section>
+
+  <section class="card">
+    <h2>받은 파일 확인하기</h2>
+    <p class="sub">받은 파일을 여기에 끌어다 놓으면 이 컴퓨터 안에서 지문(SHA-256)을 계산해 위 값과 비교합니다. 파일은 어디로도 보내지 않습니다.</p>
+    <label class="drop" id="drop" tabindex="0">파일을 끌어다 놓거나 눌러서 고르기<input id="pick" type="file" hidden></label>
+    <div id="res" hidden></div>
+    <details>
+      <summary>터미널로 직접 확인하기</summary>
+      <pre>Windows (PowerShell):  Get-FileHash .\파일이름 -Algorithm SHA256
+Mac (터미널):           shasum -a 256 ~/Downloads/파일이름</pre>
+      <p class="sub" style="margin-top:8px">나온 값이 위 파일의 SHA-256과 같으면 온전한 파일입니다. 전체 목록: <a id="sums" href="SHA256SUMS-release.txt">SHA256SUMS.txt</a></p>
+    </details>
+  </section>
+</main>
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const os = ios ? "ios" : /Mac/.test(ua) ? "mac" : /Win/.test(ua) ? "win" : "";
+  const main = document.querySelector("main"), first = document.querySelector("[data-os]");
+  const mine = document.querySelector(`[data-os="${os}"]`);
+  if (mine) { mine.classList.add("pick"); if (!mine.querySelector(".tag")) mine.querySelector("h2").insertAdjacentHTML("beforeend", '<span class="tag">내 기기</span>'); else mine.querySelector(".tag").textContent = "내 기기"; main.insertBefore(mine, first); }
+  let d = null;
+  try { d = await (await fetch("downloads.json", { cache: "no-store" })).json(); } catch (e) {}
+  if (!d || !d.files) { $("ver").textContent = "다운로드 파일을 준비하는 중입니다. 잠시 뒤 새로고침하세요."; $("verified").hidden = true; return; }
+  $("ver").textContent = `버전 ${d.version} · ${d.built.slice(0, 10)} 빌드`;
+  $("checklist").innerHTML = "";
+  d.checks.forEach((c) => { const li = document.createElement("li"); li.textContent = c; $("checklist").appendChild(li); });
+  const card = (f) => {
+    const el = document.createElement("div"); el.className = "file";
+    const b = document.createElement("b"); b.textContent = `${f.label} · ${(f.size / 1048576).toFixed(0)}MB`;
+    const a = document.createElement("a"); a.className = "btn" + (f.main ? "" : " ghost"); a.href = f.url; a.textContent = "받기";
+    const c = document.createElement("code"); c.textContent = `SHA-256 ${f.sha256}`;
+    el.append(b, a, c); return el;
+  };
+  d.files.filter((f) => f.os === "win").forEach((f) => $("f-win").appendChild(card(f)));
+  d.files.filter((f) => f.os === "mac").forEach((f) => $("f-mac").appendChild(card(f)));
+  if (d.sumsUrl) $("sums").href = d.sumsUrl;
+  const check = async (file) => {
+    const res = $("res"); res.hidden = false; res.className = "result wait"; res.textContent = `${file.name} 지문을 계산하는 중…`;
+    const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()))].map((x) => x.toString(16).padStart(2, "0")).join("");
+    const hit = d.files.find((f) => f.sha256 === hash);
+    const same = d.files.find((f) => f.name === file.name);
+    if (hit) { res.className = "result ok"; res.textContent = `온전한 파일입니다: ${hit.label}. 안심하고 여세요.`; }
+    else { res.className = "result bad"; res.textContent = same ? `${file.name}의 지문이 다릅니다. 덜 받아졌거나 바뀐 파일입니다. 지우고 다시 받으세요 (동기화 폴더가 아닌 곳에).` : `ODD HR ${d.version} 파일이 아닙니다. 위 목록의 파일을 받았는지 확인하세요.`; }
+    const m = document.createElement("div"); m.className = "mono"; m.style.fontWeight = "400"; m.textContent = `계산한 값 ${hash}`; res.appendChild(m);
+  };
+  const drop = $("drop");
+  $("pick").addEventListener("change", (e) => e.target.files[0] && check(e.target.files[0]));
+  drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("pick").click(); } });
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files[0]) check(e.dataTransfer.files[0]); });
+})();
+</script>
+</body>
+</html>
