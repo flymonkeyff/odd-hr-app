@@ -44,7 +44,7 @@ const ok = (c, m) => { if (c) { pass++; console.log("  O", m); } else { fail++; 
   const browser = await chromium.launch();
   const errs = [];
   async function open(name, { agentOn }) {
-    const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, timezoneId: "Asia/Seoul" });
+    const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, timezoneId: "Asia/Seoul", bypassCSP: true });   // 시험 도구가 페이지 안에서 확인 코드를 돌리려면 필요 (앱 자체의 CSP는 그대로)
     await ctx.exposeFunction("__sql", sql);
     await ctx.exposeFunction("__agent", agent);
     await ctx.exposeFunction("__store", store);
@@ -332,7 +332,7 @@ const ok = (c, m) => { if (c) { pass++; console.log("  O", m); } else { fail++; 
   ok(padTop >= 50, `Mac에서 메뉴가 창 버튼 아래로 내려간다 (${padTop}px)`);
 
   console.log("아이폰 화면");
-  const phoneCtx = await browser.newContext({ ...require("playwright").devices["iPhone 13"], timezoneId: "Asia/Seoul" });
+  const phoneCtx = await browser.newContext({ ...require("playwright").devices["iPhone 13"], timezoneId: "Asia/Seoul", bypassCSP: true });
   await phoneCtx.exposeFunction("__sql", sql); await phoneCtx.exposeFunction("__agent", agent); await phoneCtx.exposeFunction("__store", store);
   const sess = await ed.evaluate(() => ({ s: localStorage.getItem("fake-session"), u: localStorage.getItem("fake-users") }));
   await phoneCtx.addInitScript((x) => { window.ODDHR_WEB_CONFIG = { url: "https://test.supabase.co", anonKey: "x".repeat(60), platform: "web", version: "test" }; if (!localStorage.getItem("fake-session")) { localStorage.setItem("fake-session", x.s); } }, sess);
