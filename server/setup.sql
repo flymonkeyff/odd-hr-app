@@ -396,7 +396,7 @@ begin
     if new.collection = 'messages' and char_length(trim(coalesce(new.data ->> 'text', ''))) not between 1 and 4000 then
       raise exception '메시지는 1자 이상 4000자 이하여야 합니다' using errcode = '22023';
     end if;
-    if new.collection in ('messages','files','weekly') then
+    if new.collection in ('messages','files','weekly','forms') then
       new.data := new.data || jsonb_build_object('from', new.owner::text);   -- 보낸 사람은 서버가 적는다 (남의 이름으로 못 씀)
     end if;
     new.created_at := now(); new.updated_at := now();
@@ -427,7 +427,7 @@ begin
       end if;
     end loop;
   end if;
-  if new.collection in ('messages','files','weekly') then
+  if new.collection in ('messages','files','weekly','forms') then
     if (new.data -> 'from') is distinct from (old.data -> 'from') or (new.data -> 'to') is distinct from (old.data -> 'to') then
       raise exception '보낸 사람과 받는 사람은 바꿀 수 없습니다' using errcode = '42501';
     end if;
