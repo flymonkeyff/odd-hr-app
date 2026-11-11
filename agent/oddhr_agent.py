@@ -208,7 +208,7 @@ def _scan(rooms: list[str] | None, messages_by_room: dict[str, list[dict]] | Non
     cfg = load_config()
     rooms = rooms or cfg.get("rooms") or list((messages_by_room or {}).keys())
     if not rooms:
-        return {"ok": False, "error": "감시할 대화방이 없습니다. config.json의 rooms에 대화방 이름을 넣으세요."}
+        return {"ok": False, "error": "감시할 대화방이 없습니다. ODD HR 앱의 설정 → 카톡 에이전트에서 대화방 이름을 넣고 저장하세요."}
     llm = LocalModel(cfg.get("llm"))
     llm = llm if llm.available() else None
     con = connect()
