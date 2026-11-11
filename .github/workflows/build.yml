@@ -128,16 +128,32 @@ jobs:
           path: dist/ODD-HR-*-mac-*.zip
 
   release:
-    name: 릴리스에 올리기
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: 다운로드 페이지(Releases)에 올리기
     needs: [windows, mac]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           path: out
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: ODD HR ${{ steps.v.outputs.version }}
+          make_latest: true
+          body: |
+            ## 받을 파일
+            - **Windows**: `ODD-HR-${{ steps.v.outputs.version }}-win.zip` — 압축을 풀고 `ODD HR.exe` 실행 (설치 과정 없음, 권장)
+              - 설치형이 필요하면 `ODD-HR-Setup-${{ steps.v.outputs.version }}.exe`
+            - **Mac (M1·M2·M3·M4)**: `ODD-HR-${{ steps.v.outputs.version }}-mac-apple-silicon.zip`
+            - **Mac (인텔)**: `ODD-HR-${{ steps.v.outputs.version }}-mac-intel.zip`
+
+            처음 실행할 때 경고가 뜨면: Windows는 **추가 정보 → 실행**, Mac은 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기**.
+            쓰는 법은 저장소의 [사용-가이드.md](../../blob/main/사용-가이드.md)를 보세요. 받은 파일이 온전한지는 `SHA256.txt`의 크기와 비교하세요.
           files: |
             out/ODD-HR-Windows/*.exe
-            out/ODD-HR-Mac/*.dmg
+            out/ODD-HR-Windows/SHA256.txt
+            out/ODD-HR-Windows-portable/*.zip
+            out/ODD-HR-Mac-zip/*.zip
