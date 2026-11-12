@@ -238,6 +238,96 @@ textarea.auto { min-height: 0; }
   .row { min-height: 44px; }
 }
 html { -webkit-text-size-adjust: 100%; }
+/* ===== 흐름을 끊지 않는 UX ===== */
+.topbar { display: flex; align-items: center; gap: 10px; margin: -28px 0 -6px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 6; padding: 10px 0; background: color-mix(in srgb, var(--bg) 86%, transparent); -webkit-backdrop-filter: saturate(1.6) blur(14px); backdrop-filter: saturate(1.6) blur(14px); }
+.topbar > :first-child { min-width: 0; }
+.searchbox { flex: 1; max-width: 520px; margin-left: auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 0; border-radius: 10px; padding: 8px 12px; background: var(--bg); box-shadow: inset 0 0 0 0.5px var(--sep-strong); color: var(--muted); font-size: 13.5px; cursor: pointer; text-align: left; }
+.searchbox:hover { box-shadow: inset 0 0 0 1px var(--blue); }
+.kbd { font-size: 11px; font-weight: 600; color: var(--muted); border: 0.5px solid var(--sep-strong); border-radius: 5px; padding: 1px 6px; background: var(--fill-2); white-space: nowrap; }
+.btn.ghost { background: transparent; box-shadow: none; }
+.linklike { border: 0; background: none; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; display: block; width: 100%; }
+.linklike:hover { color: var(--blue-text); text-decoration: underline; text-underline-offset: 2px; }
+.talk-n { font-size: 12px; color: var(--muted); margin-left: 6px; }
+.notif-row { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+.notif-main { border: 0; background: none; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; min-width: 0; }
+.notif-main:hover .t { color: var(--blue-text); }
+.task-link { margin-top: 4px; border: 0; border-radius: 8px; padding: 4px 8px; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; background: color-mix(in srgb, var(--bg) 70%, transparent); color: var(--ink); }
+.bubble-row.mine .task-link { background: rgba(255,255,255,.2); color: inherit; }
+/* 옆 패널 */
+#drawer:not(.open), #qa:not(.open), #pal:not(.open), #wn:not(.open) { display: none; }
+#drawer .scrim, #qa .scrim, #pal .scrim, #wn .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.18); z-index: 40; animation: fade .15s ease; }
+#drawer .scrim { background: rgba(0,0,0,.08); }
+.sheet { position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); z-index: 41; background: var(--bg); box-shadow: -10px 0 40px rgba(0,0,0,.18); display: grid; grid-template-rows: auto minmax(0, 1fr); animation: slidein .18s cubic-bezier(.2,.8,.2,1); padding-top: env(safe-area-inset-top, 0px); }
+.sheet-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px 10px 20px; border-bottom: 0.5px solid var(--sep); }
+.sheet-head strong { font-size: 15px; flex: 1; }
+.x { border: 0; background: var(--fill-2); width: 28px; height: 28px; border-radius: 50%; font-size: 17px; line-height: 1; cursor: pointer; color: var(--ink); }
+.sheet-body { overflow: auto; padding: 16px 20px max(20px, env(safe-area-inset-bottom, 0px)); display: grid; gap: 14px; align-content: start; overscroll-behavior: contain; }
+.dw-head { display: grid; gap: 8px; }
+.dw-title { font-size: 19px; font-weight: 700; border: 0; background: transparent; color: var(--ink); padding: 4px 0; margin: 0; border-bottom: 1px dashed transparent; width: 100%; }
+input.dw-title:hover, input.dw-title:focus { border-bottom-color: var(--sep-strong); outline: none; }
+.dw-decide { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-md); background: var(--blue-soft); }
+.dw-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dw-fields > :last-child { grid-column: 1 / -1; }
+.dw-talk { display: grid; gap: 8px; }
+.chat-log.small { max-height: 260px; padding: 6px; background: var(--grouped); border-radius: var(--r-md); }
+.drawer-log { min-height: 50vh; max-height: calc(100vh - 220px); }
+.dw-meta { font-size: 12px; color: var(--muted); }
+.mini-sel { border: 0; background: var(--fill-2); border-radius: 8px; padding: 7px 8px; max-width: 100%; min-width: 0; }
+.seg { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px; background: var(--fill-2); border-radius: 10px; }
+.seg button { flex: 1; border: 0; background: transparent; border-radius: 8px; padding: 7px 8px; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--bg); box-shadow: 0 1px 3px rgba(0,0,0,.12); color: var(--blue-text); }
+.seg button:disabled:not([aria-pressed="true"]) { opacity: .45; cursor: default; }
+/* 모달: 새로 만들기, 찾기, 새 기능 */
+.modal { position: fixed; z-index: 41; left: 50%; top: 12vh; transform: translateX(-50%); width: min(620px, calc(100vw - 24px)); background: var(--bg); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.3), 0 0 0 0.5px var(--sep-strong); padding: 16px; display: grid; gap: 12px; animation: pop .16s cubic-bezier(.2,.8,.2,1); max-height: 76vh; }
+.qa-text { width: 100%; border: 0; font-size: 17px; font-weight: 600; resize: none; background: transparent; color: var(--ink); padding: 6px 2px; }
+.qa-text:focus { outline: none; }
+.qa-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.qa-row .field { margin: 0; }
+.qa-row .field > span { display: none; }
+.pal { padding: 0; gap: 0; overflow: hidden; grid-template-rows: auto minmax(0, 1fr) auto; }
+.pal-q { border: 0; border-bottom: 0.5px solid var(--sep); font-size: 17px; padding: 16px 18px; background: transparent; color: var(--ink); }
+.pal-q:focus { outline: none; }
+.pal-list { overflow: auto; padding: 6px; display: grid; gap: 1px; align-content: start; }
+.pal-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--ink); font-size: 14px; }
+.pal-item[aria-selected="true"] { background: var(--blue); color: var(--on-accent); }
+.pal-item[aria-selected="true"] .pal-s { color: inherit; opacity: .85; }
+.pal-ic { width: 26px; height: 26px; border-radius: 7px; background: var(--fill-2); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.pal-item[aria-selected="true"] .pal-ic { background: rgba(255,255,255,.22); }
+.pal-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.pal-foot { display: flex; justify-content: space-between; gap: 10px; padding: 8px 14px; font-size: 11.5px; color: var(--muted); border-top: 0.5px solid var(--sep); flex-wrap: wrap; }
+.wn { top: 9vh; width: min(560px, calc(100vw - 24px)); overflow: auto; padding: 22px; }
+.wn-head h2 { margin: 8px 0 2px; font-size: 22px; }
+.wn-list { display: grid; gap: 10px; }
+.wn-item { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 12px; border-radius: var(--r-md); background: var(--grouped); }
+.wn-item p { margin: 3px 0 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.wn-old summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.wn-old ul { margin: 4px 0 8px; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+/* 토스트 */
+#toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); z-index: 60; display: flex; align-items: center; gap: 12px; background: #1d1d1f; color: #fff; border-radius: 12px; padding: 10px 10px 10px 16px; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.3); opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; max-width: calc(100vw - 32px); }
+#toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#toast.err { background: var(--red); }
+#toast .linkish { color: #ffb38f; font-weight: 700; }
+#toast .x { background: rgba(255,255,255,.16); color: #fff; width: 24px; height: 24px; font-size: 14px; }
+@keyframes slidein { from { transform: translateX(24px); opacity: 0; } }
+@keyframes pop { from { transform: translate(-50%, 8px) scale(.98); opacity: 0; } }
+@keyframes fade { from { opacity: 0; } }
+@media (hover: none) { .searchbox .kbd, .sheet-head .kbd, .qa .kbd, .pal-foot { display: none; } }
+@media (max-width: 860px) {
+  .topbar { margin-top: -16px; }
+  .searchbox .kbd, .topbar .btn.primary { font-size: 12px; }
+  .sheet { width: 100vw; top: auto; height: 92vh; border-radius: 16px 16px 0 0; animation: slideup .2s cubic-bezier(.2,.8,.2,1); }
+  .modal { top: auto; bottom: 0; transform: none; left: 0; width: 100vw; border-radius: 16px 16px 0 0; max-height: 88vh; padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); animation: slideup .2s; }
+  .dw-fields { grid-template-columns: minmax(0, 1fr); }
+  #toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  .pal-s { max-width: 120px; }
+  .notif-row { grid-template-columns: auto minmax(0, 1fr); }
+  .notif-row > .actions { grid-column: 1 / -1; justify-content: flex-start; }
+}
+@keyframes slideup { from { transform: translateY(30px); opacity: 0; } }
+.mac-app .topbar { padding-top: 10px; }
+.row-notice { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.row-notice > span { flex: 1 1 260px; }
 body { overscroll-behavior-y: none; }
 .team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
 .mcard { border-radius: var(--r-lg); padding: 18px; display: grid; gap: 12px; align-content: start; background: var(--bg); box-shadow: var(--shadow); min-width: 0; }
@@ -394,6 +484,24 @@ script = re.sub(r'h\("dt", \{ text: "자동 점검" \}\), h\("dd", \{ text: st\.
 script = script.replace("Claude 크레딧을 쓰지 않습니다.", "추가 비용이 들지 않습니다.")
 # ---------------------------------------------------------------- 새 화면: 팀원, 설정
 NEW_VIEWS = r'''
+  // ---------- 업데이트 진행 소식 (설정 화면, 토스트) ----------
+  if (window.oddhr && window.oddhr.onUpdate) window.oddhr.onUpdate((m) => {
+    const U = S.upd || (S.upd = {});
+    U.text = m.state === "downloading" ? `새 버전 받는 중 ${m.percent || 0}% · ${m.text || ""}` : m.state === "installing" ? "지문 확인을 마쳤습니다. 설치하고 다시 켭니다…" : m.state === "error" ? `업데이트하지 못했습니다: ${m.text}` : U.text;
+    const el = document.getElementById("updtext"); if (el) el.textContent = U.text;
+    if (m.state === "installing") toast("업데이트를 설치하고 다시 켭니다.");
+    if (m.state === "error") { U.busy = false; toast(U.text, null, true); }
+  });
+  function installNotice() {
+    const NV = window.oddhr || {};
+    if (!NV.installState || S.instHide) return null;
+    const st = NV.installState();
+    if (st.installed) return null;
+    return h("div", { class: "notice row-notice" }, h("span", { text: "설치하지 않고 압축본으로 켰습니다. 설치하면 '설치된 앱'과 시작 메뉴에 뜨고 자동 업데이트가 됩니다." }),
+      h("button", { class: "btn small primary", type: "button", text: "제대로 설치하기", onclick: async () => { toast("설치 파일을 받는 중…"); const r = await NV.installProperly(); if (!r.ok) toast(`설치하지 못했습니다: ${r.error}`, null, true); } }),
+      h("button", { class: "btn small ghost", type: "button", text: "닫기", onclick: () => { S.instHide = true; render(); } }));
+  }
+
   // ---------- 팀원 (PM 버전 / 팀원 버전) ----------
   const STAGES = {
     "기획": ["리서치", "기획안", "시나리오·대본", "콘티", "섭외"],
@@ -565,7 +673,20 @@ NEW_VIEWS = r'''
       S.confirmLogout ? h("div", { class: "notice" }, APP.isAnon ? "코드로 들어온 계정은 로그아웃하면 다시 들어올 수 없습니다. 코드를 다시 넣으면 새 사람으로 들어가고, PM이 팀원 탭의 '기록 옮기기'로 이전 기록을 옮겨 줘야 합니다." : "로그아웃합니다. 이메일과 비밀번호로 다시 들어올 수 있습니다.",
         h("div", { class: "actions", style: "margin-top:8px" }, h("button", { class: "btn small danger", type: "button", text: "로그아웃", onclick: () => APP.signOut() }), h("button", { class: "btn small", type: "button", text: "취소", onclick: () => { S.confirmLogout = false; render(); } })))
         : h("div", { class: "actions" }, h("button", { class: "btn", type: "button", text: "로그아웃", onclick: () => { S.confirmLogout = true; render(); } })));
-    return [pageHead("설정", "화면 모드, 키 컬러, 알림은 이 기기에만 저장됩니다."), link, looks, alerts, profile, projects, mobile, agentBox, account];
+    const NV = window.oddhr || {};
+    const U = S.upd || (S.upd = {});
+    const inst = NV.installState ? NV.installState() : { installed: true, inApplications: true };
+    const updates = NV.updateCheck ? h("section", { class: "box" }, h("h2", {}, "업데이트"),
+      h("div", { class: "setrow" },
+        h("div", { class: "lab2", text: "지금 버전" }), h("div", { text: APP.version || "-" }),
+        h("div", { class: "lab2", text: "상태" }), h("div", { id: "updtext", text: U.text || "앱을 켤 때마다 새 버전을 확인하고, 있으면 먼저 설치한 뒤 켭니다." })),
+      h("div", { class: "actions" },
+        h("button", { class: "btn", type: "button", disabled: !!U.busy, text: "지금 확인", onclick: async () => { U.busy = true; U.text = "확인 중…"; render(); const r = await NV.updateCheck(); U.busy = false; U.latest = r.latest; U.available = !!r.available; U.text = !r.ok ? `확인하지 못했습니다: ${r.error}` : r.available ? `새 버전 ${r.latest}이 있습니다.` : r.dev ? "개발용 실행이라 업데이트하지 않습니다." : `최신 버전입니다 (${r.current}).`; render(); } }),
+        U.available ? h("button", { class: "btn primary", type: "button", disabled: !!U.busy, text: `${U.latest} 설치하고 다시 켜기`, onclick: async () => { U.busy = true; U.text = "받는 중…"; render(); const r = await NV.updateInstall(); if (!r.ok) { U.busy = false; U.text = `설치하지 못했습니다: ${r.error}`; render(); } } }) : null,
+        h("button", { class: "btn", type: "button", text: "새 기능 보기", onclick: () => openWhatsNew(true) }),
+        !inst.installed && NV.installProperly ? h("button", { class: "btn primary", type: "button", disabled: !!U.busy, text: "제대로 설치하기", title: "설치된 앱과 시작 메뉴에 등록하고 자동 업데이트를 켭니다", onclick: async () => { U.busy = true; U.text = "설치 파일을 받는 중…"; render(); const r = await NV.installProperly(); if (!r.ok) { U.busy = false; U.text = `설치하지 못했습니다: ${r.error}`; render(); } } }) : null),
+      !inst.installed ? h("div", { class: "notice", text: "지금은 압축을 풀어 켠 상태라 Windows '설치된 앱'과 시작 메뉴에 없습니다. '제대로 설치하기'를 누르면 설치 프로그램으로 깔고 다시 켭니다. 기록은 그대로입니다." }) : null) : null;
+    return [pageHead("설정", "화면 모드, 키 컬러, 알림은 이 기기에만 저장됩니다."), link, updates, looks, alerts, profile, projects, mobile, agentBox, account];
   }
 
   function agentSettings() {

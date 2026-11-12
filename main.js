@@ -1,9 +1,13 @@
 // ODD HR 데스크톱 앱 (Electron 메인 프로세스)
 // - 창, 트레이, 로그인할 때 자동 시작
 // - 팀 서버 설정 (설치 파일에 들어 있는 app-config.json, 없으면 첫 화면에서 입력)
-// - 카톡 에이전트 실행 (Windows에만 들어 있음, 화면이 부를 때만 돎)
+// - 카톡 에이전트 실행 (Windows, Mac에 들어 있음, 화면이 부를 때만 돎)
+// - 자동 업데이트: 켤 때 새 버전을 먼저 받아 지문을 확인하고 설치한 뒤 다시 켠다 (updater.js)
+// - Windows: 설치하지 않고 압축본으로 켜면 '제대로 설치'를 권한다 (설치된 앱, 시작 메뉴에 등록)
+// - Mac: 응용 프로그램 폴더 밖에서 켜면 옮기기를 권한다
 "use strict";
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, nativeTheme, Notification } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, nativeTheme, Notification, dialog } = require("electron");
+const updater = require("./updater");
 const path = require("path");
 const fs = require("fs");
 const { execFile } = require("child_process");
@@ -144,8 +148,99 @@ ipcMain.handle("oddhr:open-folder", async (e, dir) => {
 ipcMain.on("oddhr:set-theme", (e, t) => { nativeTheme.themeSource = ["light", "dark"].includes(t) ? t : "system"; });
 ipcMain.handle("oddhr:notify", (e, { title, body }) => { if (Notification.isSupported()) new Notification({ title: String(title || "ODD HR").slice(0, 80), body: String(body || "").slice(0, 240) }).show(); });
 
-app.whenReady().then(() => {
+// ---------------------------------------------------------------- 업데이트
+const NO_UPDATE = !app.isPackaged || process.env.ODDHR_NO_UPDATE === "1";
+const appBundle = () => (IS_MAC ? path.resolve(process.execPath, "..", "..", "..") : "");
+// Windows에서 설치 프로그램으로 깔린 앱인가 (압축을 풀어 켠 것은 '설치된 앱'에 안 뜬다)
+const installedOnWin = () => {
+  if (!IS_WIN) return true;
+  const exe = process.execPath.toLowerCase();
+  const roots = [process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs"), process.env.ProgramFiles, process.env["ProgramFiles(x86)"]].filter(Boolean).map((x) => x.toLowerCase());
+  return roots.some((r) => exe.startsWith(r)) && fs.existsSync(path.join(path.dirname(process.execPath), "Uninstall ODD HR.exe"));
+};
+let splash = null;
+function showSplash(text) {
+  if (START_HIDDEN) return;
+  const html = `<!doctype html><meta charset="utf-8"><style>
+    body{margin:0;font:14px -apple-system,"Segoe UI","Malgun Gothic",sans-serif;background:#fff;color:#1d1d1f;display:grid;place-items:center;height:100vh;-webkit-app-region:drag;user-select:none}
+    @media(prefers-color-scheme:dark){body{background:#1c1c1e;color:#f5f5f7}}
+    .w{width:300px;display:grid;gap:12px;text-align:center}svg{height:28px;fill:#F15524;margin:0 auto}
+    .bar{height:6px;border-radius:3px;background:rgba(120,120,128,.2);overflow:hidden}.bar i{display:block;height:100%;width:0;background:#F15524;transition:width .2s}
+    .s{font-size:12px;opacity:.65}</style>
+    <div class="w"><svg viewBox="0 0 201 128"><circle cx="64" cy="64" r="64"/><path d="M106 0A64 64 0 0 1 106 128Z"/><path d="M169 8.57A64 64 0 0 1 169 119.43Z"/></svg>
+    <div id="t">${text}</div><div class="bar"><i id="b"></i></div><div class="s" id="s"></div></div>
+    <script>window.set=(t,p,s)=>{document.getElementById("t").textContent=t;document.getElementById("b").style.width=(p||0)+"%";document.getElementById("s").textContent=s||""}</script>`;
+  splash = new BrowserWindow({ width: 380, height: 210, frame: false, resizable: false, show: true, center: true, alwaysOnTop: false, skipTaskbar: false, backgroundColor: nativeTheme.shouldUseDarkColors ? "#1c1c1e" : "#ffffff",
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, javascript: true } });
+  splash.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
+}
+const splashSet = (t, p, sub) => { if (splash && !splash.isDestroyed()) splash.webContents.executeJavaScript(`window.set && window.set(${JSON.stringify(t)}, ${Number(p) || 0}, ${JSON.stringify(sub || "")})`).catch(() => {}); };
+const closeSplash = () => { if (splash && !splash.isDestroyed()) splash.close(); splash = null; };
+const sendUpdate = (msg) => { if (win && !win.isDestroyed()) win.webContents.send("oddhr:update", msg); };
+let updating = false;
+async function updateNow(info, from) {
+  if (updating) return { ok: false, error: "이미 업데이트 중입니다." };
+  updating = true;
+  try {
+    const mb = (n) => (n / 1048576).toFixed(0);
+    const prog = (got, total) => { const p = total ? Math.round((got / total) * 100) : 0; const sub = total ? `${mb(got)} / ${mb(total)}MB` : `${mb(got)}MB`; splashSet(`새 버전 ${info.latest} 받는 중`, p, sub); sendUpdate({ state: "downloading", percent: p, text: sub }); };
+    const got = await updater.fetchVerified(info, prog);
+    splashSet("지문 확인 완료 · 설치하는 중", 100, "잠시 뒤 다시 켜집니다");
+    sendUpdate({ state: "installing" });
+    const r = updater.install(got.file, process.platform, { appBundle: appBundle() });
+    if (!r.ok) throw new Error(r.error);
+    try { fs.writeFileSync(path.join(app.getPath("userData"), "updated-from"), app.getVersion()); } catch (e) {}
+    quitting = true;
+    setTimeout(() => app.exit(0), 400);
+    return { ok: true };
+  } catch (e) {
+    updating = false;
+    sendUpdate({ state: "error", text: String(e.message || e) });
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+async function startupUpdate() {
+  if (NO_UPDATE) return false;
+  showSplash("업데이트 확인 중");
+  try {
+    const info = await updater.check(app.getVersion(), process.platform, process.arch);
+    if (!info.available) return false;
+    const r = await updateNow(info, "startup");
+    return r.ok;
+  } catch (e) {
+    return false;               // 인터넷이 없거나 서버가 응답하지 않으면 지금 버전으로 켠다
+  }
+}
+ipcMain.handle("oddhr:update-check", async () => {
+  if (NO_UPDATE) return { ok: true, current: app.getVersion(), latest: app.getVersion(), available: false, dev: true };
+  try { const i = await updater.check(app.getVersion(), process.platform, process.arch); return { ok: true, current: i.current, latest: i.latest, available: i.available }; }
+  catch (e) { return { ok: false, current: app.getVersion(), error: String(e.message || e) }; }
+});
+ipcMain.handle("oddhr:update-install", async () => {
+  try { const i = await updater.check(app.getVersion(), process.platform, process.arch); if (!i.available) return { ok: false, error: "이미 최신 버전입니다." }; return await updateNow(i, "settings"); }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+// Windows 압축본 → 설치 프로그램으로 제대로 설치 (설치된 앱, 시작 메뉴 등록, 자동 업데이트)
+ipcMain.handle("oddhr:install-properly", async () => {
+  if (!IS_WIN || installedOnWin()) return { ok: false, error: "이미 설치된 앱입니다." };
+  try {
+    const i = await updater.check("0.0.0", process.platform, process.arch);
+    if (!i.asset) return { ok: false, error: "설치 파일을 찾지 못했습니다." };
+    return await updateNow(i, "install");
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+ipcMain.on("oddhr:install-state", (e) => { e.returnValue = { installed: installedOnWin(), inApplications: IS_MAC ? app.isInApplicationsFolder() : true }; });
+
+app.whenReady().then(async () => {
+  // Mac: 응용 프로그램 폴더 밖(다운로드 폴더 등)에서 켰으면 옮기기를 권한다 → Launchpad와 응용 프로그램에 뜬다
+  if (IS_MAC && app.isPackaged && !app.isInApplicationsFolder()) {
+    const r = dialog.showMessageBoxSync({ type: "question", buttons: ["응용 프로그램 폴더로 옮기기", "나중에"], defaultId: 0, cancelId: 1,
+      message: "ODD HR을 응용 프로그램 폴더로 옮길까요?", detail: "옮기면 Launchpad와 응용 프로그램에 뜨고, 자동 업데이트가 됩니다." });
+    if (r === 0) { try { if (app.moveToApplicationsFolder()) return; } catch (e) { dialog.showErrorBox("옮기지 못했습니다", String(e.message || e)); } }
+  }
+  if (await startupUpdate()) return;          // 새 버전을 설치하러 간다 (앱은 곧 다시 켜진다)
   createWindow();
+  closeSplash();
   createTray();
   // 카톡 에이전트가 있는 PC는 처음 한 번 로그인할 때 자동 시작을 켠다 (설정에서 끌 수 있음)
   const flag = path.join(app.getPath("userData"), "login-item-set");

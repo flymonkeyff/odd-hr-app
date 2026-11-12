@@ -19,7 +19,7 @@ let bad = 0; const log = (ok, m) => { console.log(`${ok ? "  O" : "  X"} ${m}`);
 const sha = (p) => crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
 const find = (dir, re) => { const out = []; const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => { const p = path.join(d, e.name); if (e.isDirectory() && !/\.app$/.test(e.name)) walk(p); else if (re.test(e.name)) out.push(p); }); walk(dir); return out; };
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "oddhr-verify-"));
-const APPFILES = ["app/index.html", "app/desk.js", "app/shim.js", "app/vendor/supabase.js", "main.js", "preload.js"];
+const APPFILES = ["app/index.html", "app/desk.js", "app/shim.js", "app/vendor/supabase.js", "main.js", "preload.js", "updater.js"];
 
 function checkAsar(asarPath, label) {
   const list = asar.listPackage(asarPath).map((x) => x.replace(/\\/g, "/").replace(/^\//, ""));
@@ -49,14 +49,14 @@ for (const z of find(IN, new RegExp(`^ODD-HR-${V.replace(/\./g, "\\.")}-win\\.zi
   const ag = find(d, /^odd-hr-agent\.exe$/)[0];
   log(!!ag && fs.statSync(ag).size > 1e6, "카톡 에이전트(odd-hr-agent.exe) 들어 있음");
   const a = find(d, /^app\.asar$/)[0]; if (a) checkAsar(a, "Windows 앱"); else log(false, "app.asar 없음");
-  add(z, "win", "Windows (압축, 설치 없이 실행)", true);
+  add(z, "win", "Windows 압축본 (설치 없이 실행)", false);
 }
 // Windows 설치형
 for (const x of find(IN, new RegExp(`^ODD-HR-Setup-${V.replace(/\./g, "\\.")}\\.exe$`))) {
   console.log(`\n${path.basename(x)}`);
   log(fs.readFileSync(x).subarray(0, 2).toString() === "MZ", "Windows 실행 파일 머리");
   try { execFileSync("7z", ["t", x], { stdio: "pipe" }); log(true, "설치 파일 안의 압축 검사 통과 (7z)"); } catch (e) { log(false, "설치 파일 안의 압축이 깨졌음"); }
-  add(x, "win", "Windows (설치형)", false);
+  add(x, "win", "Windows 설치 파일 (권장)", true);
 }
 // Mac
 for (const [chip, arch, label] of [["apple-silicon", "arm64", "Mac Apple 실리콘 (M1~M4)"], ["intel", "x86_64", "Mac 인텔"]]) {
@@ -73,10 +73,18 @@ for (const [chip, arch, label] of [["apple-silicon", "arm64", "Mac Apple 실리�
     log(agKind.includes("Mach-O") && agKind.includes(arch), `카톡 에이전트가 들어 있고 ${arch}용`);
     const a = path.join(d, "ODD HR.app", "Contents", "Resources", "app.asar");
     if (fs.existsSync(a)) checkAsar(a, `Mac ${chip}`); else log(false, "app.asar 없음");
-    add(z, "mac", label, chip === "apple-silicon");
+    add(z, "mac", `${label} · 자동 업데이트용 zip`, false);
+  }
+  // 처음 설치용 dmg: UDIF 형식(끝 512바이트가 'koly')인지
+  for (const g of find(IN, new RegExp(`^ODD-HR-${V.replace(/\./g, "\\.")}-mac-${chip}\\.dmg$`))) {
+    console.log(`\n${path.basename(g)}`);
+    const fd = fs.openSync(g, "r"), size = fs.statSync(g).size, tail = Buffer.alloc(4);
+    fs.readSync(fd, tail, 0, 4, size - 512); fs.closeSync(fd);
+    log(tail.toString() === "koly" && size > 5e7, "Mac 디스크 이미지 형식 (hdiutil verify는 Mac 빌드에서 통과)");
+    add(g, "mac", `${label} (권장)`, chip === "apple-silicon");
   }
 }
-const want = 4;
+const want = 6;
 log(files.length === want, `배포 파일 ${files.length}/${want}개`);
 
 // 지문 목록
@@ -85,7 +93,7 @@ fs.writeFileSync(path.join(OUT, "SHA256SUMS.txt"), rows.map((r) => `${r.sha256} 
 fs.writeFileSync(path.join(OUT, "downloads.json"), JSON.stringify({
   version: V, built: new Date().toISOString(), commit: process.env.GITHUB_SHA || "",
   sumsUrl: `https://github.com/${REPO}/releases/download/v${V}/SHA256SUMS.txt`,
-  checks: ["압축 전체 CRC 검사 (깨진 파일 없음)", "앱 안 화면 파일이 소스 코드와 바이트까지 일치", "공개 키만 들어 있음 (관리자 키 없음)", "Mac 칩별 실행 파일과 카톡 에이전트, 임시 서명 확인", "서버 권한 시험과 앱 전체 흐름 시험 통과"],
+  checks: ["압축 전체 CRC 검사 (깨진 파일 없음)", "앱 안 화면 파일이 소스 코드와 바이트까지 일치", "공개 키만 들어 있음 (관리자 키 없음)", "Mac 칩별 실행 파일과 카톡 에이전트, 서명과 디스크 이미지 확인", "자동 업데이트가 같은 지문 목록으로 다시 확인", "서버 권한 시험과 앱 전체 흐름 시험 통과"],
   files: rows.map(({ path: _, ...r }) => r)
 }, null, 2));
 rows.forEach((r) => fs.copyFileSync(r.path, path.join(OUT, r.name)));

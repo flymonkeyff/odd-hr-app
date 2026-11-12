@@ -790,10 +790,14 @@ button.row:hover { background: var(--fill-2); }
   const editing = () => {
     const a = document.activeElement;
     if (document.querySelector("#main .dp-pop:not([hidden])")) return true;
-    return !!(a && a.closest && a.closest("#main") && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.closest("form, .dp")));
+    return !!(a && a.closest && a.closest("#main, #drawer, #qa, #pal") && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.closest("form, .dp")));
   };
   function paint() {
     tellOS();
+    if (inLayer()) {
+      if (S.drawer) { const lg = document.querySelector("#drawer .chat-log"); const atEnd = lg && lg.scrollHeight - lg.scrollTop - lg.clientHeight < 60; renderDrawer(); const lg2 = document.querySelector("#drawer .chat-log"); if (lg2 && atEnd) lg2.scrollTop = lg2.scrollHeight; }
+      deferred = true; renderMenu(); return;
+    }
     if (S.view === "messages" && $("chatlog") && editing()) { refreshChat(); renderMenu(); return; }   // 글을 쓰는 중에도 새 메시지는 보인다
     if (editing()) { deferred = true; renderMenu(); return; }
     render();
@@ -1022,8 +1026,8 @@ button.row:hover { background: var(--fill-2); }
 
     const decide = h("section", { class: "box" },
       h("h2", {}, "승인 기다리는 제안", h("span", { class: "n", text: `${props.length}건` })),
-      h("p", { class: "sub", text: "긴급도 순입니다. 눌러서 작업 화면에서 처리하세요." }),
-      props.length ? h("div", { class: "rows" }, props.slice(0, 5).map((r) => h("button", { class: "row", type: "button", onclick: () => { S.sel.task = r.url; go("tasks"); } },
+      h("p", { class: "sub", text: "긴급도 순입니다. 누르면 옆에서 바로 처리합니다." }),
+      props.length ? h("div", { class: "rows" }, props.slice(0, 5).map((r) => h("button", { class: "row", type: "button", onclick: () => openTask(r.url) },
         h("span", { class: "lvl " + level(r), text: level(r) }),
         h("div", {}, h("div", { class: "t", text: r["할 일"] || "(제목 없음)" }), taskMeta(r)),
         h("span", { class: "pill", text: "열기" })))) : h("div", { class: "empty", text: "결정할 제안이 없습니다. PC 에이전트의 카톡 점검을 가져오면 여기에 쌓입니다." }),
@@ -1203,8 +1207,8 @@ button.row:hover { background: var(--fill-2); }
         return h("div", { class: "row" + (delAsk ? " confirm" : "") },
           h("button", { class: "check " + CHECK[g], type: "button", disabled: S.busy || !canMove,
             title: canMove ? `${g}에서 ${next}(으)로` : "PM 승인 대기 중", "aria-label": canMove ? `${r["할 일"]}: ${g}에서 ${next}(으)로 바꾸기` : `${r["할 일"]}: PM 승인 대기 중`,
-            onclick: () => act("todo", () => updatePage(r, { "상태": next, ...(next === "완료" ? { "완료 처리": "PM", "완료일": new Date().toISOString() } : {}) }), `${next}(으)로 바꿨습니다.`) }),
-          h("div", {}, h("div", { class: "t", text: r["할 일"] || "(제목 없음)" }), taskMeta(r),
+            onclick: () => setStatus(r, next) }),
+          h("div", {}, h("button", { class: "t linklike", type: "button", text: r["할 일"] || "(제목 없음)", title: "옆에서 열기", onclick: () => openTask(r.url) }), taskMeta(r), taskMsgs(r).length ? h("span", { class: "talk-n", text: `💬 ${taskMsgs(r).length}` }) : null,
             delAsk ? h("div", { class: "msg err", text: "삭제하면 되돌릴 수 없습니다. 끝난 일이면 삭제 대신 완료 처리를 권합니다." }) : null),
           h("div", { class: "actions" },
             delAsk ? [
@@ -1212,11 +1216,11 @@ button.row:hover { background: var(--fill-2); }
               h("button", { class: "btn small", type: "button", text: "취소", onclick: () => { S.confirmDel = null; render(); } })
             ] : [
               S.isPM && g !== "완료" ? h("button", { class: "btn small primary", type: "button", disabled: S.busy, text: g === "검토 요청" ? "승인" : "완료", title: "PM만 완료 처리할 수 있습니다",
-                onclick: () => act("todo", () => updatePage(r, { "상태": "완료", "완료 처리": "PM", "완료일": new Date().toISOString() }), g === "검토 요청" ? "승인해 완료했습니다." : "완료 처리했습니다.") }) : null,
+                onclick: () => setStatus(r, "완료", {}, g === "검토 요청" ? "승인해 완료했습니다." : "완료 처리했습니다.") }) : null,
               !S.isPM && g === "검토 요청" ? h("span", { class: "pill", text: "PM 승인 대기" }) : null,
-              g !== "막힘" && g !== "완료" ? h("button", { class: "btn small", type: "button", disabled: S.busy, text: "막힘", onclick: () => act("todo", () => updatePage(r, { "상태": "막힘" }), "막힘으로 표시했습니다. PM 홈의 불씨에 올라갑니다.") }) : null,
-              S.isPM && g === "완료" ? h("button", { class: "btn small", type: "button", disabled: S.busy, text: "다시 열기", onclick: () => act("todo", () => updatePage(r, { "상태": "진행" }), "다시 진행 중으로 바꿨습니다.") }) : null,
-              canEdit && g !== "완료" ? h("button", { class: "btn small", type: "button", disabled: S.busy, text: "고치기", "aria-label": `${r["할 일"]} 고치기`, onclick: () => { S.editTask = r.url; render(); } }) : null,
+              g !== "막힘" && g !== "완료" ? h("button", { class: "btn small", type: "button", disabled: S.busy, text: "막힘", onclick: () => setStatus(r, "막힘", {}, "막힘으로 표시했습니다. PM에게 알림이 갑니다.") }) : null,
+              S.isPM && g === "완료" ? h("button", { class: "btn small", type: "button", disabled: S.busy, text: "다시 열기", onclick: () => setStatus(r, "진행", {}, "다시 진행 중으로 바꿨습니다.") }) : null,
+              APP ? h("button", { class: "btn small", type: "button", text: "열기", "aria-label": `${r["할 일"]} 옆에서 열기`, onclick: () => openTask(r.url) }) : canEdit && g !== "완료" ? h("button", { class: "btn small", type: "button", disabled: S.busy, text: "고치기", "aria-label": `${r["할 일"]} 고치기`, onclick: () => { S.editTask = r.url; render(); } }) : null,
               S.isPM ? h("button", { class: "btn small danger", type: "button", disabled: S.busy, text: "삭제", "aria-label": `${r["할 일"]} 삭제`, onclick: () => { S.confirmDel = r.url; render(); } }) : null
             ]));
       })));
@@ -1247,7 +1251,7 @@ button.row:hover { background: var(--fill-2); }
       h("div", { class: "actions wide" },
         h("button", { class: "btn primary small", type: "submit", disabled: S.busy, text: "저장" }),
         h("button", { class: "btn small", type: "button", text: "취소", onclick: () => { S.editTask = null; S.clearDrafts = true; render(); } }),
-        APP ? h("button", { class: "btn small", type: "button", text: "이 일로 메시지 보내기", onclick: () => { S.editTask = null; const m = mates.find((x) => x.name === r["담당자"] && x.user_id !== S.me); S.chat.ch = m ? `d:${m.user_id}` : `p:${pidOf(r["프로젝트"])}`; S.chat.draft = `「${r["할 일"]}」 `; go("messages"); } }) : null));
+        APP ? h("button", { class: "btn small", type: "button", text: "이 일로 메시지 보내기", onclick: () => { S.editTask = null; render(); openTask(r.url); } }) : null));
   }
 
   // ---------- 목표 ----------
@@ -1539,24 +1543,24 @@ button.row:hover { background: var(--fill-2); }
   function allNotifs() {
     if (!APP || !S.me) return [];
     const out = [], me = S.me;
-    const push = (id, at, kind, text, sub, go) => out.push({ id, at: T(at), kind, text, sub, go });
+    const push = (id, at, kind, text, sub, go, acts) => out.push({ id, at: T(at), kind, text, sub, go, acts });
     S.data.tasks.forEach((r) => {
       const st = statusOf(r), by = r["상태 변경자"], byName = r["상태 변경자 이름"] || "팀원";
       if (st === "제안" && r["제안한 사람"] && r["만든 사람"] !== me && isMine(r))
-        push(`p-${r.url}`, r["생성"], "요청", r["출처"] === "PM 제안" ? `${r["제안한 사람"]}님(PM)이 업무를 요청했습니다` : `${r["제안한 사람"]}님이 할 일을 제안했습니다`, r["할 일"], () => { go("home"); setTimeout(() => { const el = document.querySelector(".incoming"); if (el) el.scrollIntoView({ block: "start" }); }, 60); });
+        push(`p-${r.url}`, r["생성"], "요청", r["출처"] === "PM 제안" ? `${r["제안한 사람"]}님(PM)이 업무를 요청했습니다` : `${r["제안한 사람"]}님이 할 일을 제안했습니다`, r["할 일"], () => openTask(r.url), [["수락", () => acceptTask(r), true], ["넘기기", () => { openTask(r.url); S.drawer.decline = true; renderDrawer(); }]]);
       if (r["만든 사람"] === me && r["출처"] === "팀원 제안" && by && by !== me && ["진행", "기각"].includes(st))
-        push(`a-${r.url}-${st}`, r["상태 변경"], st === "기각" ? "거절" : "수락", `${byName}님이 내 제안을 ${st === "기각" ? "넘겼습니다" : "수락했습니다"}`, `${r["할 일"]}${st === "기각" && r["기각 사유"] ? ` · ${r["기각 사유"]}` : ""}`, () => go("todo"));
+        push(`a-${r.url}-${st}`, r["상태 변경"], st === "기각" ? "거절" : "수락", `${byName}님이 내 제안을 ${st === "기각" ? "넘겼습니다" : "수락했습니다"}`, `${r["할 일"]}${st === "기각" && r["기각 사유"] ? ` · ${r["기각 사유"]}` : ""}`, () => openTask(r.url));
       if (st === "완료" && by && by !== me && isMine(r))
-        push(`d-${r.url}`, r["상태 변경"], "완료", `PM이 완료 처리했습니다`, r["할 일"], () => go("todo"));
+        push(`d-${r.url}`, r["상태 변경"], "완료", `PM이 완료 처리했습니다`, r["할 일"], () => openTask(r.url));
       if (st === "검토 요청" && isPMof(r["프로젝트"]) && by && by !== me)
-        push(`r-${r.url}-${r["상태 변경"]}`, r["상태 변경"], "검토", `${byName}님이 검토를 요청했습니다`, r["할 일"], () => go("todo"));
+        push(`r-${r.url}-${r["상태 변경"]}`, r["상태 변경"], "검토", `${byName}님이 검토를 요청했습니다`, r["할 일"], () => openTask(r.url), [["승인", () => setStatus(r, "완료", {}, "승인해 완료했습니다."), true], ["다시 해 주세요", () => { setStatus(r, "진행", {}, "다시 진행으로 돌렸습니다."); openChat(`d:${by}`, `「${r["할 일"]}」 `); }]]);
       if (st === "막힘" && isPMof(r["프로젝트"]) && by && by !== me)
-        push(`b-${r.url}-${r["상태 변경"]}`, r["상태 변경"], "막힘", `${byName}님이 막혔다고 표시했습니다`, r["할 일"], () => go("todo"));
+        push(`b-${r.url}-${r["상태 변경"]}`, r["상태 변경"], "막힘", `${byName}님이 막혔다고 표시했습니다`, r["할 일"], () => openTask(r.url), [["묻기", () => openChat(`d:${by}`, `「${r["할 일"]}」 어디서 막혔어요? `), true]]);
       const n = dday(r["마감"]);
       if (isMine(r) && ["대기", "진행", "막힘"].includes(st) && n !== null && n <= 1 && n >= 0)
-        push(`due-${r.url}-${ymd(new Date())}`, new Date(new Date().setHours(8, 0, 0, 0)).toISOString(), "마감", n === 0 ? "오늘 마감입니다" : "내일 마감입니다", r["할 일"], () => go("todo"));
+        push(`due-${r.url}-${ymd(new Date())}`, new Date(new Date().setHours(8, 0, 0, 0)).toISOString(), "마감", n === 0 ? "오늘 마감입니다" : "내일 마감입니다", r["할 일"], () => openTask(r.url), [["검토 요청", () => setStatus(r, "검토 요청", {}, "PM에게 검토 요청을 올렸습니다.")]]);
     });
-    S.msgs.forEach((m) => { if (m.to === me && m.from !== me) push(`m-${m.url}`, m.at, "메시지", `${nameOf(m.from)}님의 메시지`, String(m.text || "").slice(0, 80), () => { S.chat.ch = `d:${m.from}`; go("messages"); }); });
+    S.msgs.forEach((m) => { if (m.to === me && m.from !== me) push(`m-${m.url}`, m.at, "메시지", `${nameOf(m.from)}님의 메시지`, String(m.text || "").slice(0, 80), () => (m.task ? openTask(m.task) : openChat(`d:${m.from}`)), [["답장", () => openChat(`d:${m.from}`), true]]); });
     S.weeklies.forEach((w) => {
       if (w.from !== me && isPMof(w["프로젝트"]) && !w["PM 확인"]) push(`w-${w.url}-${w["제출"]}`, w["제출"], "주간", `${w["이름"] || nameOf(w.from)}님이 주간 업데이트를 냈습니다`, w["프로젝트"], () => { S.weekOpen = w.url; go("home"); });
       if (w.from === me && w["PM 확인"]) push(`wc-${w.url}`, w["PM 확인 시각"], "확인", `${w["PM 확인"]}님이 내 주간 업데이트를 확인했습니다`, w["PM 코멘트"] || w["프로젝트"], () => { S.weekOpen = w.url; go("home"); });
@@ -1588,10 +1592,11 @@ button.row:hover { background: var(--fill-2); }
         h("span", { class: "toolbar", style: "margin-left:auto" },
           unread.length ? h("button", { class: "btn small", type: "button", text: "모두 읽음", onclick: () => { lsSet(seenKey(), String(Date.now())); render(); } }) : null,
           h("button", { class: "btn small", type: "button", text: S.notifOpen ? "새 알림만" : "지난 알림", onclick: () => { S.notifOpen = !S.notifOpen; render(); } }))),
-      h("div", { class: "rows" }, list.map((n) => h("button", { class: "row" + (n.at > s ? " unread" : ""), type: "button", onclick: n.go },
+      h("div", { class: "rows" }, list.map((n) => h("div", { class: "row notif-row" + (n.at > s ? " unread" : "") },
         h("span", { class: "pill " + (KIND_CLASS[n.kind] || ""), text: n.kind }),
-        h("div", {}, h("div", { class: "t", text: n.text }), h("div", { class: "m", text: [n.sub, ago(new Date(n.at).toISOString())].filter(Boolean).join(" · ") })),
-        h("span", { class: "pill", text: "열기" })))));
+        h("button", { class: "notif-main", type: "button", onclick: n.go }, h("div", { class: "t", text: n.text }), h("div", { class: "m", text: [n.sub, ago(new Date(n.at).toISOString())].filter(Boolean).join(" · ") })),
+        h("div", { class: "actions" }, (n.acts || []).map(([l, fn, primary]) => h("button", { class: "btn small" + (primary ? " primary" : ""), type: "button", disabled: S.busy, text: l, onclick: fn })),
+          h("button", { class: "btn small ghost", type: "button", text: "열기", onclick: n.go }))))));
   }
 
   // ---------- 시작 안내 (처음 쓰는 사람용, 다 하면 사라진다) ----------
@@ -1646,8 +1651,9 @@ button.row:hover { background: var(--fill-2); }
         h("div", { class: "bubble" },
           mine || c.uid ? null : h("div", { class: "who", text: nameOf(m.from) }),
           m.file ? fileChip(m) : h("div", { class: "txt", text: m.text }),
+          m.task && S.data.tasks.some((r) => r.url === m.task) ? h("button", { class: "task-link", type: "button", text: `☐ ${S.data.tasks.find((r) => r.url === m.task)["할 일"]} · ${statusOf(S.data.tasks.find((r) => r.url === m.task))}`, onclick: () => openTask(m.task) }) : null,
           h("div", { class: "meta" }, h("span", { text: hm(m.at) }),
-            h("button", { class: "linkish", type: "button", text: "할 일로", title: "이 메시지로 할 일을 만들거나 제안합니다", onclick: () => { S.prefill = { title: titleOf(String(m.text).split("\n")[0]), quote: `[${nameOf(m.from)}] ${String(m.text).slice(0, 300)}`, who: !mine && m.from ? nameOf(m.from) : "", mode: "제안" }; S.newProj = APP.projectName(c.pid); go("tasks"); setTimeout(() => { const el = $("ntitle"); if (el) { el.scrollIntoView({ block: "center" }); el.focus(); } }, 50); } }),
+            h("button", { class: "linkish", type: "button", text: "할 일로", title: "이 메시지로 할 일을 만들거나 업무 요청을 보냅니다 (화면을 떠나지 않음)", onclick: () => openQuick({ kind: !mine && m.from ? "업무 요청" : "할 일", title: titleOf(String(m.text).replace(/^「.*?」\s*/, "").split("\n")[0]), quote: `[${nameOf(m.from)}] ${String(m.text).slice(0, 300)}`, who: !mine && m.from ? nameOf(m.from) : "", proj: APP.projectName(c.pid) }) }),
             mine ? h("button", { class: "linkish danger", type: "button", text: "지우기", onclick: () => act("chat", () => S.db.collection("messages").doc(m.url).delete(), "지웠습니다.") }) : null))));
       return out;
     });
@@ -1660,9 +1666,10 @@ button.row:hover { background: var(--fill-2); }
     if (atEnd) log.scrollTop = log.scrollHeight;
     lsSet(readKey(c.id), String(Date.now()));
   }
-  async function sendMsg(c, text, fileId) {
+  async function sendMsg(c, text, fileId, taskId) {
     const body = { text: text.slice(0, 4000), at: new Date().toISOString(), "프로젝트": APP.projectName(c.pid) };
     if (fileId) body.file = fileId;
+    if (taskId) body.task = taskId;
     if (c.uid) body.to = c.uid;
     await S.db.collection("messages").doc(`m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`).set(body);
   }
@@ -1851,7 +1858,7 @@ button.row:hover { background: var(--fill-2); }
             w["PM 코멘트"] ? h("div", { class: "msg", text: `PM 코멘트: ${w["PM 코멘트"]}` }) : null,
             pm ? h("form", { class: "quick-bar", onsubmit: (e) => { e.preventDefault(); const cm = e.target.wcm.value.trim(); act("wk", () => S.db.collection("weekly").doc(w.url).update({ "PM 확인": myNameFor(w["프로젝트"]) || "PM", "PM 확인 시각": new Date().toISOString(), ...(cm ? { "PM 코멘트": cm.slice(0, 500) } : {}) }), "확인했습니다. 본인에게 알림이 갑니다."); } },
               h("input", { name: "wcm", id: `wcm-${w.url}`, class: "quick-in", placeholder: "한 줄 코멘트 (선택)" }), h("button", { class: "btn primary", type: "submit", disabled: S.busy, text: w["PM 확인"] ? "다시 확인" : "확인" })) : null,
-            h("button", { class: "btn small", type: "button", text: w.from === S.me ? "내 대화방 보기" : `${w["이름"] || "팀원"}님에게 메시지`, onclick: () => { S.chat.ch = w.from === S.me ? `p:${pidOf(w["프로젝트"])}` : `d:${w.from}`; go("messages"); } })) : null);
+            h("button", { class: "btn small", type: "button", text: w.from === S.me ? "내 대화방 보기" : `${w["이름"] || "팀원"}님에게 메시지`, onclick: () => openChat(w.from === S.me ? `p:${pidOf(w["프로젝트"])}` : `d:${w.from}`, w.from === S.me ? "" : "주간 업데이트 봤어요. ") })) : null);
       })) : h("div", { class: "empty", text: "이번 주 제출이 아직 없습니다." }),
       flashEl("wk"));
   }
@@ -1868,15 +1875,15 @@ button.row:hover { background: var(--fill-2); }
         const ask = S.decline === r.url;
         return h("div", { class: "row req" },
           h("span", { class: "lvl " + level(r), text: level(r) }),
-          h("div", {}, h("div", { class: "t", text: r["할 일"] }),
+          h("div", {}, h("button", { class: "t linklike", type: "button", text: r["할 일"], onclick: () => openTask(r.url) }),
             h("div", { class: "m" }, h("span", { text: `${r["제안한 사람"] || "PM"}님 요청` }), r["프로젝트"] ? h("span", { class: "pill", text: r["프로젝트"] }) : null, ddayEl(r["마감"]), r["마감"] ? h("span", { text: `${String(r["마감"]).slice(5).replace("-", "/")}까지` }) : null),
             r["근거 메시지"] && !/직접 제안했습니다/.test(r["근거 메시지"]) ? h("div", { class: "quote", style: "margin-top:6px;padding:8px 12px;font-size:13px", text: r["근거 메시지"] }) : null,
             ask ? h("form", { class: "quick-bar", style: "margin-top:8px", onsubmit: (e) => { e.preventDefault(); const v = e.target.dr.value.trim(); S.decline = null; act("incoming", () => updatePage(r, { "상태": "기각", "기각 사유": v || "사유 없음" }), "넘겼습니다. 요청한 사람에게 알림이 갑니다."); } },
               h("input", { name: "dr", id: `dr-${r.url}`, class: "quick-in", placeholder: "넘기는 이유 (예: 이번 주 촬영이 겹쳐요, 디자인 쪽 일 같아요)" }), h("button", { class: "btn", type: "submit", text: "넘기기" }), h("button", { class: "btn", type: "button", text: "취소", onclick: () => { S.decline = null; render(); } })) : null),
           ask ? h("span") : h("div", { class: "actions" },
-            h("button", { class: "btn small primary", type: "button", disabled: S.busy, text: "수락", onclick: () => { const mem = APP ? APP.myMember(pidOf(r["프로젝트"])) : null; act("incoming", () => updatePage(r, { "상태": "진행", ...(mem ? { "담당자": mem.name } : {}) }), "수락했습니다. 할 일에 들어갔습니다."); } }),
+            h("button", { class: "btn small primary", type: "button", disabled: S.busy, text: "수락", onclick: () => acceptTask(r) }),
             h("button", { class: "btn small", type: "button", text: "넘기기", onclick: () => { S.decline = r.url; render(); setTimeout(() => { const el = $(`dr-${r.url}`); if (el) el.focus(); }, 0); } }),
-            APP ? h("button", { class: "btn small", type: "button", text: "묻기", title: "요청한 사람에게 1:1 메시지", onclick: () => { S.chat.ch = r["만든 사람"] ? `d:${r["만든 사람"]}` : `p:${pidOf(r["프로젝트"])}`; S.chat.draft = `「${r["할 일"]}」 관련해서 `; go("messages"); } }) : null));
+            APP ? h("button", { class: "btn small", type: "button", text: "묻기", title: "요청한 사람에게 1:1 메시지", onclick: () => openTask(r.url) }) : null));
       })),
       flashEl("incoming"));
   }
@@ -2221,21 +2228,23 @@ button.row:hover { background: var(--fill-2); }
         h("span", { class: "pill" + (m.todo ? " info" : ""), text: m.todo ? "할 일 같음" : "메일" }),
         h("div", {}, h("div", { class: "t", text: m.subject }), h("div", { class: "m" }, h("span", { text: m.from }), h("span", { text: new Date(m.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) })), h("div", { class: "m", style: "margin-top:2px", text: m.snippet.slice(0, 140) })),
         h("div", { class: "actions" },
-          h("button", { class: "btn small primary", type: "button", text: "할 일로", onclick: () => { S.prefill = { title: titleOf(m.subject.replace(/^(re|fw|fwd)\s*:\s*/i, "")), quote: `[Gmail] ${m.from}: ${m.subject} · ${m.snippet.slice(0, 200)}`, mode: S.isPM ? "제안" : "바로" }; go("tasks"); setTimeout(() => { const el = $("ntitle"); if (el) { el.scrollIntoView({ block: "center" }); el.focus(); } }, 60); } }),
+          h("button", { class: "btn small primary", type: "button", text: "할 일로", onclick: () => openQuick({ kind: "할 일", title: titleOf(m.subject.replace(/^(re|fw|fwd)\s*:\s*/i, "")), quote: `[Gmail] ${m.from}: ${m.subject} · ${m.snippet.slice(0, 200)}` }) }),
           h("a", { class: "btn small", href: `https://mail.google.com/mail/u/0/#all/${m.thread}`, target: "_blank", rel: "noopener", text: "Gmail에서 열기" }))))) : GM.list ? h("div", { class: "empty", text: "조건에 맞는 메일이 없습니다." }) : null);
   }
 
   // ---------- 메시지에 드라이브 파일 붙이기 ----------
-  function filePicker(c) {
+  function filePicker(c, inDrawer) {
+    const done = () => { if (inDrawer && S.drawer) S.drawer.pick = false; else S.chat.pick = false; };
+    const rerender = () => (inDrawer ? renderDrawer() : render());
     const pname = APP.projectName(c.pid);
     const q = (S.chat.pq || "").toLowerCase();
     const list = S.files.filter((f) => f["프로젝트"] === pname && (!q || `${f["이름"]} ${f["폴더"]} ${f["메모"]}`.toLowerCase().includes(q))).slice(0, 30);
-    const fin = h("input", { type: "file", hidden: true, onchange: (e) => { const f = e.target.files && e.target.files[0]; if (!f) return; act("chat", async () => { const id = await putFile(pname, f, "기타", "메시지로 보냄"); await sendMsg(c, `[드라이브] ${f.name}`, id); S.chat.pick = false; }, "올리고 보냈습니다."); } });
+    const fin = h("input", { type: "file", hidden: true, onchange: (e) => { const f = e.target.files && e.target.files[0]; if (!f) return; act("chat", async () => { const id = await putFile(pname, f, "기타", "메시지로 보냄"); await sendMsg(c, `[드라이브] ${f.name}`, id); done(); }, "올리고 보냈습니다."); } });
     return h("div", { class: "file-pick" },
-      h("div", { class: "quick-bar" }, h("input", { id: "pq", type: "search", class: "searchin", placeholder: `${pname} 드라이브에서 찾기`, value: S.chat.pq || "", oninput: (e) => { S.chat.pq = e.target.value; clearTimeout(filePicker.t); filePicker.t = setTimeout(() => { render(); const el = $("pq"); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 200); } }),
+      h("div", { class: "quick-bar" }, h("input", { id: "pq", type: "search", class: "searchin", placeholder: `${pname} 드라이브에서 찾기`, value: S.chat.pq || "", oninput: (e) => { S.chat.pq = e.target.value; clearTimeout(filePicker.t); filePicker.t = setTimeout(() => { rerender(); const el = $("pq"); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 200); } }),
         h("button", { class: "btn small", type: "button", text: "새 파일 올려 보내기", onclick: () => fin.click() }), fin,
-        h("button", { class: "btn small", type: "button", text: "닫기", onclick: () => { S.chat.pick = false; render(); } })),
-      list.length ? h("div", { class: "rows" }, list.map((f) => h("button", { class: "row", type: "button", onclick: () => act("chat", async () => { await sendMsg(c, `[드라이브] ${f["이름"]}`, f.url); S.chat.pick = false; }, "파일 위치를 보냈습니다.") },
+        h("button", { class: "btn small", type: "button", text: "닫기", onclick: () => { done(); rerender(); } })),
+      list.length ? h("div", { class: "rows" }, list.map((f) => h("button", { class: "row", type: "button", onclick: () => run(async () => { await sendMsg(c, `[드라이브] ${f["이름"]}`, f.url); done(); }, "파일 위치를 보냈습니다.") },
         h("span", { class: "ftype", text: fileIcon(f) }), h("div", {}, h("div", { class: "t", text: f["이름"] }), h("div", { class: "m", text: `${f["폴더"] || "기타"} 폴더 · ${f["올린이"] || ""}` })), h("span", { class: "pill", text: "보내기" })))) : h("div", { class: "msg", style: "color:var(--muted)", text: "드라이브에 파일이 없습니다. '새 파일 올려 보내기'를 누르세요." }));
   }
   function fileChip(m) {
@@ -2249,6 +2258,305 @@ button.row:hover { background: var(--fill-2); }
         f["종류"] !== "링크" ? h("button", { class: "linkish", type: "button", text: "저장", onclick: () => openFile(f, true) }) : null,
         h("button", { class: "linkish", type: "button", text: "위치 보기", onclick: () => { S.drive.proj = pidOf(f["프로젝트"]); S.drive.folder = f["폴더"] || "기타"; S.drive.hl = f.url; go("drive"); } })));
   }
+
+  // ======================================================================
+  // 흐름을 끊지 않는 UX: 옆 패널, 어디서나 만들기, 찾기(⌘K), 되돌리기, 새 기능
+  // ======================================================================
+  const MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl";
+  const layer = (id) => { let el = $(id); if (!el) { el = h("div", { id }); document.body.appendChild(el); } return el; };
+  const inLayer = () => { const a = document.activeElement; return !!(a && a.closest && a.closest("#drawer, #qa, #pal, #wn")); };
+
+  // ---------- 알림 토스트 (되돌리기) ----------
+  let toastTimer = null;
+  function toast(text, undo, err) {
+    const el = layer("toast");
+    el.textContent = ""; el.className = "show" + (err ? " err" : "");
+    el.setAttribute("role", "status");
+    el.appendChild(h("span", { text }));
+    if (undo) el.appendChild(h("button", { class: "linkish", type: "button", text: "되돌리기", onclick: async () => { el.className = ""; try { await undo(); toast("되돌렸습니다."); paint(); } catch (e) { toast(errText(e), null, true); } } }));
+    el.appendChild(h("button", { class: "x", type: "button", "aria-label": "닫기", text: "×", onclick: () => { el.className = ""; } }));
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.className = ""; }, undo ? 6000 : 3500);
+  }
+  async function run(fn, okText, undo) {
+    S.busy = true;
+    try { await fn(); if (okText) toast(okText, undo); S.clearDrafts = true; }
+    catch (e) { toast(errText(e), null, true); }
+    finally { S.busy = false; render(); }
+  }
+  // 상태 바꾸기는 어디서 하든 같은 길 (되돌리기 포함)
+  function setStatus(r, next, extra, okText) {
+    const prev = statusOf(r), prevExtra = {};
+    Object.keys(extra || {}).forEach((k) => { prevExtra[k] = r[k] === undefined ? "" : r[k]; });
+    const props = { "상태": next, ...(next === "완료" ? { "완료 처리": "PM", "완료일": new Date().toISOString() } : {}), ...(extra || {}) };
+    const canUndo = prev !== "완료" || isPMof(r["프로젝트"]);
+    return run(() => updatePage(r, props), okText || `'${r["할 일"]}' ${next}`, canUndo ? () => updatePage(r, { "상태": prev, ...prevExtra }) : null);
+  }
+  const acceptTask = (r) => { const mem = APP ? APP.myMember(pidOf(r["프로젝트"])) : null; return setStatus(r, "진행", mem && !r["담당자"] ? { "담당자": mem.name } : {}, "수락했습니다. 내 할 일에 들어갔습니다."); };
+
+  // ---------- 옆 패널 ----------
+  function openTask(url) { S.drawer = { type: "task", id: url, draft: "" }; renderDrawer(true); }
+  function openChat(ch, draft) { S.drawer = { type: "chat", id: ch, draft: draft || "" }; renderDrawer(true); }
+  function closeDrawer() { S.drawer = null; renderDrawer(); }
+  function renderDrawer(focus) {
+    const host = layer("drawer");
+    const act0 = document.activeElement, actId = act0 && act0.closest && act0.closest("#drawer") ? act0.id : null;
+    const keep = {}; host.querySelectorAll("input[id], textarea[id], select[id]").forEach((el) => { if (el.type !== "file") keep[el.id] = el.value; });
+    const sc = host.querySelector(".sheet-body"), top = sc ? sc.scrollTop : 0;
+    host.textContent = "";
+    if (!S.drawer) { host.className = ""; return; }
+    let body = null, title = "";
+    if (S.drawer.type === "task") { const r = S.data.tasks.find((x) => x.url === S.drawer.id); if (!r) { S.drawer = null; host.className = ""; return; } title = "할 일"; body = taskDrawer(r); }
+    if (S.drawer.type === "chat") { const c = channels().find((x) => x.id === S.drawer.id); if (!c) { S.drawer = null; host.className = ""; return; } title = c.uid ? `${c.name}님과 메시지` : `${c.name} 대화방`; body = chatDrawer(c); }
+    host.className = "open";
+    host.appendChild(h("div", { class: "scrim", onclick: closeDrawer }));
+    host.appendChild(h("aside", { class: "sheet", role: "dialog", "aria-label": title },
+      h("div", { class: "sheet-head" }, h("strong", { text: title }), h("span", { class: "kbd", text: "Esc" }), h("button", { class: "x", type: "button", "aria-label": "닫기", text: "×", onclick: closeDrawer })),
+      h("div", { class: "sheet-body" }, body)));
+    for (const [id, v] of Object.entries(keep)) { const el = document.getElementById(id); if (el && el.closest("#drawer") && el.value !== v) { if (el.__dpSet) el.__dpSet(v); else el.value = v; } }
+    const nb = host.querySelector(".sheet-body"); if (nb) nb.scrollTop = top;
+    if (actId) { const el = document.getElementById(actId); if (el) { el.focus(); if (el.setSelectionRange && el.value) el.setSelectionRange(el.value.length, el.value.length); } }
+    else if (focus) { const el = host.querySelector("[data-autofocus]") || host.querySelector(".x"); if (el) el.focus(); }
+    const lg = host.querySelector(".chat-log"); if (lg && (focus || S.drawer.stick !== false)) lg.scrollTop = lg.scrollHeight;
+  }
+  // 할 일에 딸린 대화: 메시지에 task를 붙여 보낸다. 메인 메시지 화면에서도 같은 글이 보인다
+  const taskMsgs = (r) => S.msgs.filter((m) => m.task === r.url);
+  function taskDrawer(r) {
+    const pname = r["프로젝트"] || "미분류", pm = isPMof(pname), st = statusOf(r), mine = isMine(r);
+    const canEdit = pm || mine || r["만든 사람"] === S.me || !APP;
+    const mates = membersOf(pname);
+    const other = (() => {
+      const who = mates.find((m) => m.name === r["담당자"]);
+      if (who && who.user_id !== S.me) return who;
+      const maker = mates.find((m) => m.user_id === r["만든 사람"]);
+      return maker && maker.user_id !== S.me ? maker : null;
+    })();
+    const save = (props, txt) => run(() => updatePage(r, props), txt || "저장했습니다.");
+    const steps = ["대기", "진행", "검토 요청", "막힘"].concat(pm ? ["완료"] : []);
+    const head = h("div", { class: "dw-head" },
+      h("div", { class: "m" }, h("span", { class: "pill " + (st === "막힘" ? "risk" : st === "완료" ? "ok" : st === "제안" ? "info" : ""), text: st }), r["프로젝트"] ? h("span", { class: "pill", text: r["프로젝트"] }) : null, ddayEl(r["마감"]), r["작성"] === "ODD HR 작성" ? h("span", { class: "pill ai", text: "ODD HR 작성" }) : null),
+      canEdit ? h("input", { id: "dwtitle", class: "dw-title", value: r["할 일"] || "", "aria-label": "할 일 이름", onkeydown: (e) => { if (e.key === "Enter") e.target.blur(); }, onblur: (e) => { const v = e.target.value.trim(); if (v && v !== r["할 일"]) save({ "할 일": v }, "이름을 고쳤습니다."); } })
+        : h("h3", { class: "dw-title", text: r["할 일"] || "(제목 없음)" }));
+    // 제안 상태면 결정부터
+    let decide = null;
+    if (st === "제안") {
+      const ask = S.drawer.decline;
+      decide = h("div", { class: "dw-decide" },
+        h("div", { class: "sub", text: r["제안한 사람"] ? `${r["제안한 사람"]}님이 보낸 ${r["출처"] === "PM 제안" ? "업무 요청" : "제안"}입니다.` : `${r["출처"] || "ODD HR"}에서 찾은 일입니다.` }),
+        ask ? h("form", { class: "quick-bar", onsubmit: (e) => { e.preventDefault(); const v = e.target.dwr.value.trim() || "사유 없음"; S.drawer.decline = false; setStatus(r, "기각", { "기각 사유": v }, "넘겼습니다. 보낸 사람에게 알림이 갑니다."); } },
+          h("input", { id: "dwr", name: "dwr", class: "quick-in", placeholder: "넘기는 이유 (예: 이번 주 촬영이 겹쳐요)", "data-autofocus": "" }), h("button", { class: "btn", type: "submit", text: "넘기기" }), h("button", { class: "btn", type: "button", text: "취소", onclick: () => { S.drawer.decline = false; renderDrawer(); } }))
+        : h("div", { class: "actions" },
+          h("button", { class: "btn primary", type: "button", disabled: S.busy, text: mine || !APP ? "수락" : "작업 시작", "data-autofocus": "", onclick: () => acceptTask(r) }),
+          h("button", { class: "btn", type: "button", disabled: S.busy, text: "이미 처리함", onclick: () => setStatus(r, pm ? "완료" : "검토 요청", pm ? {} : { "메모": "이미 처리했다고 표시" }, pm ? "완료로 기록했습니다." : "PM에게 검토 요청으로 올렸습니다.") }),
+          h("button", { class: "btn", type: "button", text: "넘기기", onclick: () => { S.drawer.decline = true; renderDrawer(); setTimeout(() => { const el = $("dwr"); if (el) el.focus(); }, 0); } })));
+    }
+    const stepper = st === "제안" || st === "기각" ? null : h("div", { class: "seg", role: "group", "aria-label": "상태" }, steps.map((s) => h("button", { type: "button", "aria-pressed": String(s === st), disabled: S.busy || s === st || (!pm && st === "완료"), text: s,
+      onclick: () => setStatus(r, s, {}, s === "검토 요청" ? "PM에게 검토 요청을 올렸습니다." : s === "막힘" ? "막힘으로 표시했습니다. PM에게 알림이 갑니다." : undefined) })));
+    const fields = h("div", { class: "dw-fields" },
+      h("label", { class: "field" }, "담당자", APP ? h("select", { id: "dwwho", disabled: !canEdit, onchange: (e) => { const m = mates.find((x) => x.name === e.target.value); save({ "담당자": e.target.value, ...(m ? { "담당 역할": m.role } : {}) }, e.target.value ? `${e.target.value}님에게 맡겼습니다.` : "담당자를 비웠습니다."); } },
+        h("option", { value: "", text: "정하지 않음" }), mates.map((m) => { const o = h("option", { value: m.name, text: `${m.name} (${m.role})` }); if (m.name === r["담당자"]) o.selected = true; return o; })) : h("div", { class: "quote", text: r["담당 역할"] || "-" })),
+      h("label", { class: "field" }, "긴급도", h("select", { id: "dwlvl", disabled: !canEdit, onchange: (e) => save({ "긴급도": e.target.value }, "긴급도를 바꿨습니다.") }, LEVELS.map((l) => { const o = h("option", { value: l, text: l }); if (l === level(r)) o.selected = true; return o; }))),
+      canEdit ? dateField("dwdue", "마감", { placeholder: "마감 없음", value: r["마감"] || "", onchange: (v) => { if (v !== (r["마감"] || "")) save({ "마감": v }, v ? `마감을 ${prettyDate(v)}로 바꿨습니다.` : "마감을 지웠습니다."); } }) : h("label", { class: "field" }, "마감", h("div", { class: "quote", text: r["마감"] || "없음" })));
+    const why = r["근거 메시지"] ? h("div", { class: "dw-why" }, h("div", { class: "group-title", text: "근거" }), h("div", { class: "quote", text: r["근거 메시지"] }), r["출처 미팅"] ? h("button", { class: "linkish", type: "button", text: `미팅: ${r["출처 미팅"]}`, onclick: () => { const m = S.data.meetings.find((x) => x["제목"] === r["출처 미팅"]); closeDrawer(); if (m) S.sel.meeting = m.url; go("meetings"); } }) : null) : null;
+    // 이 일에 대한 대화
+    let talk = null;
+    if (APP && S.me) {
+      const list = taskMsgs(r);
+      const target = S.drawer.to || (other ? `d:${other.user_id}` : `p:${pidOf(pname)}`);
+      const targets = [[`p:${pidOf(pname)}`, `${pname} 대화방`], ...mates.filter((m) => m.user_id !== S.me).map((m) => [`d:${m.user_id}`, `${m.name}님에게 (1:1)`])];
+      const send = async (fileId, text) => {
+        const ta = $("dwmsg"), v = (text || (ta ? ta.value : "")).trim();
+        if (!v && !fileId) return;
+        const c = channels().find((x) => x.id === ($("dwto") || {}).value) || channels().find((x) => x.id === target);
+        if (!c) return;
+        if (ta) ta.value = ""; S.drawer.draft = "";
+        try { await sendMsg(c, v ? `「${r["할 일"]}」 ${v}` : `「${r["할 일"]}」 파일`, fileId, r.url); } catch (e) { toast(errText(e), null, true); if (ta) ta.value = v; }
+      };
+      const fin = h("input", { type: "file", hidden: true, onchange: async (e) => { const f = e.target.files && e.target.files[0]; if (!f) return; try { toast(`${f.name} 올리는 중…`); const id = await putFile(pname, f, "기타", `할 일: ${r["할 일"]}`); await send(id, `파일 ${f.name}`); toast("올리고 보냈습니다."); } catch (err) { toast(errText(err), null, true); } } });
+      talk = h("div", { class: "dw-talk" },
+        h("div", { class: "group-title" }, "이 일에 대한 대화", h("span", { text: String(list.length) })),
+        list.length ? h("div", { class: "chat-log small" }, list.map((m) => h("div", { class: "bubble-row" + (m.from === S.me ? " mine" : "") }, h("div", { class: "bubble" },
+          m.from === S.me ? null : h("div", { class: "who", text: nameOf(m.from) + (m.to ? " · 1:1" : "") }),
+          m.file ? fileChip(m) : h("div", { class: "txt", text: String(m.text || "").replace(`「${r["할 일"]}」 `, "") }),
+          h("div", { class: "meta" }, h("span", { text: `${String(m.at || "").slice(5, 10).replace("-", "/")} ${hm(m.at)}` })))))) : h("div", { class: "msg", style: "color:var(--muted)", text: other ? `${other.name}님에게 바로 물어보세요. 메시지 탭에도 같이 남습니다.` : "이 일에 대해 남길 말을 적으세요." }),
+        h("div", { class: "quick-bar" },
+          h("select", { id: "dwto", "aria-label": "보낼 곳", class: "mini-sel" }, targets.map(([id, l]) => { const o = h("option", { value: id, text: l }); if (id === target) o.selected = true; return o; })),
+          h("button", { class: "btn attach", type: "button", "aria-label": "파일 붙이기", title: "파일을 드라이브에 올리고 이 일의 대화로 보냅니다", text: "📎", onclick: () => fin.click() }), fin),
+        h("div", { class: "quick-bar" },
+          h("textarea", { id: "dwmsg", class: "quick-in", rows: 1, placeholder: "메시지 (Enter 보내기)", value: S.drawer.draft || "", oninput: (e) => { S.drawer.draft = e.target.value; }, onkeydown: (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } } }),
+          h("button", { class: "btn primary", type: "button", text: "보내기", onclick: () => send() })));
+    }
+    const meta = h("div", { class: "dw-meta", text: [r["만든이"] ? `만든 사람 ${r["만든이"]}` : "", r["생성"] ? `${String(r["생성"]).slice(5, 10).replace("-", "/")} 생성` : "", r["상태 변경자 이름"] ? `마지막 변경 ${r["상태 변경자 이름"]} ${ago(r["상태 변경"])}` : ""].filter(Boolean).join(" · ") });
+    const del = pm ? (S.drawer.del ? h("div", { class: "actions" }, h("span", { class: "msg err", text: "삭제하면 되돌릴 수 없습니다." }), h("button", { class: "btn small danger", type: "button", text: "삭제", onclick: () => { const t = r["할 일"]; closeDrawer(); run(() => removeTask(r), `'${t}'을(를) 삭제했습니다.`); } }), h("button", { class: "btn small", type: "button", text: "취소", onclick: () => { S.drawer.del = false; renderDrawer(); } }))
+      : h("button", { class: "linkish danger", type: "button", text: "이 할 일 삭제", onclick: () => { S.drawer.del = true; renderDrawer(); } })) : null;
+    return [head, decide, stepper, fields, why, talk, meta, del];
+  }
+  function chatDrawer(c) {
+    const send = async () => {
+      const ta = $("dchatin"), v = (ta ? ta.value : "").trim(); if (!v) return;
+      ta.value = ""; S.drawer.draft = "";
+      try { await sendMsg(c, v); } catch (e) { ta.value = v; toast(errText(e), null, true); }
+    };
+    lsSet(readKey(c.id), String(Date.now()));
+    return [
+      h("div", { class: "chat-log drawer-log", role: "log" }, chatLog(c)),
+      S.drawer.pick ? filePicker(c, true) : null,
+      h("div", { class: "quick-bar" },
+        h("button", { class: "btn attach", type: "button", "aria-label": "드라이브 파일 보내기", "aria-pressed": String(!!S.drawer.pick), text: "📎", onclick: () => { S.drawer.pick = !S.drawer.pick; renderDrawer(); } }),
+        h("textarea", { id: "dchatin", class: "quick-in", rows: 1, "data-autofocus": "", value: S.drawer.draft || "", placeholder: "메시지 (Enter 보내기, Shift+Enter 줄바꿈)", oninput: (e) => { S.drawer.draft = e.target.value; }, onkeydown: (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } } }),
+        h("button", { class: "btn primary", type: "button", text: "보내기", onclick: send })),
+      h("button", { class: "linkish", type: "button", text: "메시지 화면에서 크게 보기", onclick: () => { S.chat.ch = c.id; closeDrawer(); go("messages"); } })
+    ];
+  }
+
+  // ---------- 어디서나 만들기 (⌘N) ----------
+  const QA_KINDS = [["할 일", "내 할 일로 바로 넣습니다"], ["업무 요청", "팀원에게 보내 수락을 받습니다"], ["메시지", "대화방이나 팀원에게"], ["오늘 결정", "나만 보는 오늘 결정 바에"]];
+  function openQuick(pre) { S.qa = { kind: (pre && pre.kind) || "할 일", ...(pre || {}) }; renderQuick(true); }
+  function closeQuick() { S.qa = null; renderQuick(); }
+  function renderQuick(focus) {
+    const host = layer("qa"); host.textContent = "";
+    if (!S.qa) { host.className = ""; return; }
+    const Q = S.qa, pname = PROJECTS.includes(Q.proj) ? Q.proj : curProjName(), mates = membersOf(pname).filter((m) => m.user_id !== S.me);
+    host.className = "open";
+    const submit = async (e) => {
+      if (e) e.preventDefault();
+      const text = ($("qatext") || {}).value || "";
+      if (!text.trim()) { $("qatext").focus(); return; }
+      const due = ($("qadue") || {}).value || "", who = ($("qawho") || {}).value || "", lvl = ($("qalvl") || {}).value || "보통";
+      const me = APP ? APP.myMember(pidOf(pname)) : null;
+      try {
+        if (Q.kind === "할 일" || Q.kind === "업무 요청") {
+          const m = mates.find((x) => x.name === who);
+          const p = { "할 일": text.trim().slice(0, 200), "프로젝트": pname, "긴급도": lvl, "작성": "사람 작성", ...(due ? { "마감": due } : {}) };
+          if (Q.kind === "할 일") Object.assign(p, { "상태": "대기", "출처": Q.quote ? "메시지에서" : "직접 입력", "담당 역할": me ? me.role : "미정", ...(me ? { "담당자": me.name } : {}), ...(Q.quote ? { "근거 메시지": Q.quote } : {}) });
+          else { if (!m) { toast("받을 사람을 고르세요.", null, true); return; } Object.assign(p, { "상태": "제안", "출처": isPMof(pname) ? "PM 제안" : "팀원 제안", "담당자": m.name, "담당 역할": m.role, "제안한 사람": myNameFor(pname) || "팀원", "근거 메시지": Q.quote || `${myNameFor(pname) || "팀원"}님이 직접 요청했습니다.`, "확신도": "높음" }); }
+          await createPages("tasks", [p]);
+          toast(Q.kind === "할 일" ? "내 할 일에 넣었습니다." : `${m.name}님에게 업무 요청을 보냈습니다. 상대 홈에 뜹니다.`);
+        } else if (Q.kind === "메시지") {
+          const c = channels().find((x) => x.id === who) || channels().find((x) => x.pid === pidOf(pname) && !x.uid);
+          await sendMsg(c, text.trim());
+          toast(`${c.uid ? c.name + "님에게" : c.name + " 대화방에"} 보냈습니다.`);
+        } else { await addQuick(text.trim()); toast("오늘 결정 바에 넣었습니다."); }
+        closeQuick(); paint();
+      } catch (err) { toast(errText(err), null, true); }
+    };
+    const kinds = QA_KINDS.filter(([k]) => APP || k === "할 일" || k === "오늘 결정");
+    const box = h("form", { class: "modal qa", role: "dialog", "aria-label": "새로 만들기", onsubmit: submit, onkeydown: (e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit(e); } },
+      h("div", { class: "seg wide", role: "tablist" }, kinds.map(([k, d]) => h("button", { type: "button", role: "tab", "aria-pressed": String(Q.kind === k), title: d, text: k, onclick: () => { Q.text = ($("qatext") || {}).value; Q.kind = k; renderQuick(true); } }))),
+      h("textarea", { id: "qatext", class: "qa-text", rows: 2, value: Q.text || Q.title || "", placeholder: Q.kind === "메시지" ? "보낼 메시지" : Q.kind === "오늘 결정" ? "예: 오후 3시까지 썸네일 A/B 결정" : "예: 촬영 장비 대여 신청하기", onkeydown: (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing && Q.kind !== "메시지") { e.preventDefault(); submit(); } } }),
+      Q.quote ? h("div", { class: "quote", style: "font-size:12.5px", text: Q.quote.slice(0, 200) }) : null,
+      Q.kind === "오늘 결정" ? null : h("div", { class: "qa-row" },
+        APP && APP.projects.length > 1 ? h("select", { id: "qaproj", "aria-label": "프로젝트", class: "mini-sel", onchange: (e) => { Q.text = $("qatext").value; Q.proj = e.target.value; renderQuick(); } }, projSel(pname)) : null,
+        Q.kind === "업무 요청" ? h("select", { id: "qawho", "aria-label": "받을 사람", class: "mini-sel" }, h("option", { value: "", text: "받을 사람" }), mates.map((m) => { const o = h("option", { value: m.name, text: `${m.name} (${m.role})` }); if (m.name === Q.who) o.selected = true; return o; })) : null,
+        Q.kind === "메시지" ? h("select", { id: "qawho", "aria-label": "보낼 곳", class: "mini-sel" }, channels().filter((c) => c.pid === pidOf(pname) || c.uid).map((c) => { const o = h("option", { value: c.id, text: c.uid ? `${c.name}님 (1:1)` : `${c.name} 대화방` }); if (c.id === Q.ch) o.selected = true; return o; })) : null,
+        Q.kind !== "메시지" ? h("select", { id: "qalvl", "aria-label": "긴급도", class: "mini-sel" }, LEVELS.map((l) => { const o = h("option", { value: l, text: l }); if (l === (Q.level || "보통")) o.selected = true; return o; })) : null,
+        Q.kind !== "메시지" ? dateField("qadue", "마감", { placeholder: "마감 없음", value: Q.due || "" }) : null),
+      h("div", { class: "actions" }, h("span", { class: "kbd", text: `${MOD} Enter` }), h("span", { style: "flex:1" }), h("button", { class: "btn", type: "button", text: "닫기", onclick: closeQuick }), h("button", { class: "btn primary", type: "submit", text: Q.kind === "업무 요청" ? "보내기" : Q.kind === "메시지" ? "보내기" : "넣기" })));
+    host.appendChild(h("div", { class: "scrim", onclick: closeQuick }));
+    host.appendChild(box);
+    if (focus) setTimeout(() => { const t = $("qatext"); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }, 0);
+  }
+
+  // ---------- 찾기와 명령 (⌘K) ----------
+  function palItems(q) {
+    const s = q.trim().toLowerCase(), hit = (t) => !s || String(t || "").toLowerCase().includes(s);
+    const out = [];
+    const cmd = (icon, label, sub, fn, kw) => { if (hit(label) || hit(kw) || hit(sub)) out.push({ icon, label, sub, fn }); };
+    cmd("+", "새 할 일", `${MOD} N`, () => openQuick({ kind: "할 일" }), "만들기 추가 todo");
+    if (APP) { cmd("→", "업무 요청 보내기", "팀원에게", () => openQuick({ kind: "업무 요청" }), "제안 요청 맡기기"); cmd("✉", "메시지 보내기", "", () => openQuick({ kind: "메시지" }), "채팅 dm"); }
+    cmd("🎙", "말로 할 일 올리기", "", () => { go("home"); setTimeout(() => { const b = document.querySelector(".voice .btn.mic"); if (b) { b.scrollIntoView({ block: "center" }); b.click(); } }, 80); }, "음성 받아쓰기");
+    cmd("!", "오늘 결정할 것 적기", "", () => openQuick({ kind: "오늘 결정" }), "결정 바");
+    if (APP && APP.agentAvailable && S.isPM) cmd("↻", "지금 카톡 점검하기", "", () => pcSync(true), "카카오톡");
+    if (APP) cmd("✦", "새 기능 보기", APP.version ? `버전 ${APP.version}` : "", () => openWhatsNew(true), "업데이트 변경");
+    VIEWS.forEach(([k, l]) => cmd("#", `${l} 화면`, "이동", () => go(k), k));
+    if (s) {
+      S.data.tasks.filter((r) => !["기각"].includes(statusOf(r)) && hit(`${r["할 일"]} ${r["담당자"] || ""} ${r["프로젝트"] || ""}`)).slice(0, 8)
+        .forEach((r) => out.push({ icon: "☐", label: r["할 일"], sub: [statusOf(r), r["담당자"] || r["담당 역할"], r["마감"] ? r["마감"].slice(5).replace("-", "/") : ""].filter(Boolean).join(" · "), fn: () => openTask(r.url) }));
+      if (APP) {
+        const seen = new Set();
+        APP.members.filter((m) => m.user_id !== S.me && hit(`${m.name} ${m.role}`)).forEach((m) => { if (seen.has(m.user_id)) return; seen.add(m.user_id); out.push({ icon: m.name.slice(0, 1), label: `${m.name}`, sub: `${m.role} · 메시지 보내기`, fn: () => openChat(`d:${m.user_id}`) }); });
+        S.files.filter((f) => hit(`${f["이름"]} ${f["메모"] || ""}`)).slice(0, 6).forEach((f) => out.push({ icon: "▤", label: f["이름"], sub: `드라이브 › ${f["프로젝트"]} › ${f["폴더"] || "기타"}`, fn: () => openFile(f, false) }));
+      }
+      S.data.meetings.filter((m) => hit(`${m["제목"]} ${m["노트"] || ""}`)).slice(0, 4).forEach((m) => out.push({ icon: "◷", label: m["제목"] || "(제목 없음)", sub: `미팅 · ${m["일시"] ? whenText(m["일시"]) : "일정 미정"}`, fn: () => { S.sel.meeting = m.url; go("meetings"); } }));
+      S.data.goals.filter((g) => hit(g["목표"])).slice(0, 3).forEach((g) => out.push({ icon: "◎", label: g["목표"], sub: `목표 · ${Math.round((Number(g["진행률"]) || 0) * 100)}%`, fn: () => go("goals") }));
+    }
+    return out.slice(0, 40);
+  }
+  function openPalette() { S.pal = { q: "", i: 0 }; renderPalette(true); }
+  function closePalette() { S.pal = null; renderPalette(); }
+  function renderPalette(focus) {
+    const host = layer("pal"); host.textContent = "";
+    if (!S.pal) { host.className = ""; return; }
+    host.className = "open";
+    const items = palItems(S.pal.q); S.pal.i = Math.min(S.pal.i, Math.max(0, items.length - 1));
+    const pick = (it) => { closePalette(); it.fn(); };
+    const list = h("div", { class: "pal-list", role: "listbox" }, items.length ? items.map((it, i) => h("button", { type: "button", role: "option", class: "pal-item", "aria-selected": String(i === S.pal.i), onmouseenter: () => { S.pal.i = i; host.querySelectorAll(".pal-item").forEach((b, k) => b.setAttribute("aria-selected", String(k === i))); }, onclick: () => pick(it) },
+      h("span", { class: "pal-ic", text: it.icon }), h("span", { class: "pal-t", text: it.label }), it.sub ? h("span", { class: "pal-s", text: it.sub }) : null)) : h("div", { class: "empty", text: "찾는 것이 없습니다." }));
+    const input = h("input", { id: "palq", class: "pal-q", value: S.pal.q, placeholder: "할 일, 사람, 파일, 미팅, 화면, 명령 찾기", autocomplete: "off",
+      oninput: (e) => { S.pal.q = e.target.value; S.pal.i = 0; renderPalette(); const el = $("palq"); el.focus(); el.setSelectionRange(el.value.length, el.value.length); },
+      onkeydown: (e) => {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); S.pal.i = (S.pal.i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % Math.max(1, items.length); host.querySelectorAll(".pal-item").forEach((b, k) => { b.setAttribute("aria-selected", String(k === S.pal.i)); if (k === S.pal.i) b.scrollIntoView({ block: "nearest" }); }); }
+        else if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); if (items[S.pal.i]) pick(items[S.pal.i]); }
+      } });
+    host.appendChild(h("div", { class: "scrim", onclick: closePalette }));
+    host.appendChild(h("div", { class: "modal pal", role: "dialog", "aria-label": "찾기" }, input, list,
+      h("div", { class: "pal-foot" }, h("span", { text: `↑↓ 고르기 · Enter 열기 · Esc 닫기` }), h("span", { text: `${MOD} K 찾기 · ${MOD} N 새로 만들기` }))));
+    if (focus) setTimeout(() => { const el = $("palq"); if (el) el.focus(); }, 0);
+  }
+
+  // ---------- 새 기능 (업데이트 뒤 처음 켤 때) ----------
+  const CHANGES = [
+    { v: "0.3.0", title: "흐름이 끊기지 않게", items: [
+      ["옆 패널", "알림, 제안, 할 일을 누르면 지금 화면 위 오른쪽에 열립니다. 상태 바꾸기, 수락, 담당자·마감 고치기, 담당자에게 메시지, 파일 붙이기까지 그 안에서 끝납니다.", null],
+      ["알림에서 바로 처리", "알림 줄에서 수락, 넘기기, 승인, 답장을 누릅니다. 다른 화면으로 가지 않습니다.", () => go("home")],
+      ["어디서나 만들기", `${MOD} N 또는 위쪽 '+ 새로 만들기'로 할 일, 업무 요청, 메시지, 오늘 결정을 그 자리에서 만듭니다.`, () => openQuick({ kind: "할 일" })],
+      ["찾기와 명령", `${MOD} K로 할 일, 사람, 파일, 미팅, 화면, 명령을 한 번에 찾습니다.`, () => openPalette()],
+      ["되돌리기", "상태를 바꾸면 아래에 6초 동안 '되돌리기'가 뜹니다.", null],
+      ["보던 자리 기억", "화면을 오가도 보던 위치로 돌아옵니다. 위쪽 '← 뒤로'로 이전 화면에 갑니다.", null],
+      ["자동 업데이트", "앱을 켤 때 새 버전이 있으면 먼저 받아 설치하고 다시 켭니다. 받은 파일은 지문(SHA-256)을 확인한 뒤에만 설치합니다.", null]] },
+    { v: "0.2.0", title: "소통과 자료", items: [
+      ["메시지·드라이브", "팀 대화방, 1:1 메시지, 파일 위치 보내기, 프로젝트 자료함.", () => go("messages")],
+      ["업무 요청", "PM이 보낸 요청이 홈 '들어온 업무 요청'에 뜹니다.", null],
+      ["양식", "계약서 작성 도우미와 프로젝트 브리프.", () => go("forms")],
+      ["말로 할 일 올리기, 회의록 양식, 주간 업데이트, 목표 확인 알림", "", null]] }
+  ];
+  function openWhatsNew(force) {
+    if (!APP) return;
+    const seen = lsGet("oddhr.seenVersion");
+    if (!force && (!APP.version || seen === APP.version)) return;
+    if (!force && !seen) { lsSet("oddhr.seenVersion", APP.version); return; }   // 처음 설치한 사람에게는 시작하기가 있으니 띄우지 않는다
+    const host = layer("wn"); host.textContent = ""; host.className = "open";
+    const close = () => { lsSet("oddhr.seenVersion", APP.version); host.className = ""; host.textContent = ""; };
+    const cur = CHANGES.find((c) => c.v === APP.version) || CHANGES[0];
+    host.appendChild(h("div", { class: "scrim", onclick: close }));
+    host.appendChild(h("div", { class: "modal wn", role: "dialog", "aria-label": "새 기능" },
+      h("div", { class: "wn-head" }, h("span", { class: "pill ai", text: `새 버전 ${APP.version || cur.v}` }), h("h2", { text: cur.title }), h("p", { class: "sub", text: "업데이트를 마쳤습니다. 바뀐 것을 한 번 보고 시작하세요." })),
+      h("div", { class: "wn-list" }, cur.items.map(([t, d, tryIt]) => h("div", { class: "wn-item" }, h("div", {}, h("strong", { text: t }), d ? h("p", { text: d }) : null), tryIt ? h("button", { class: "btn small", type: "button", text: "써 보기", onclick: () => { close(); tryIt(); } }) : null))),
+      CHANGES.length > 1 ? h("details", { class: "wn-old" }, h("summary", { text: "지난 버전" }), CHANGES.filter((c) => c !== cur).map((c) => h("div", {}, h("strong", { text: `${c.v} · ${c.title}` }), h("ul", {}, c.items.map(([t, d]) => h("li", { text: d ? `${t}: ${d}` : t })))))) : null,
+      h("div", { class: "actions" }, h("span", { style: "flex:1" }), h("button", { class: "btn primary", type: "button", "data-autofocus": "", text: "시작하기", onclick: close }))));
+    setTimeout(() => { const b = host.querySelector("[data-autofocus]"); if (b) b.focus({ preventScroll: true }); const m = host.querySelector(".modal"); if (m) m.scrollTop = 0; }, 0);
+  }
+
+  // ---------- 위쪽 막대: 뒤로, 찾기, 새로 만들기 ----------
+  function topBar() {
+    return h("div", { class: "topbar" },
+      S.navDepth > 0 ? h("button", { class: "btn small ghost", type: "button", text: "← 뒤로", onclick: () => history.back() }) : h("span"),
+      h("button", { class: "searchbox", type: "button", onclick: openPalette, "aria-label": "찾기와 명령" }, h("span", { text: "할 일, 사람, 파일, 명령 찾기" }), h("span", { class: "kbd", text: `${MOD} K` })),
+      h("button", { class: "btn primary small", type: "button", onclick: () => openQuick({ kind: "할 일" }), title: `${MOD} N` }, "+ 새로 만들기"));
+  }
+
+  // ---------- 단축키 ----------
+  document.addEventListener("keydown", (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && (e.key === "k" || e.key === "K")) { e.preventDefault(); S.pal ? closePalette() : openPalette(); return; }
+    if (mod && (e.key === "n" || e.key === "N")) { e.preventDefault(); openQuick({ kind: "할 일" }); return; }
+    if (e.key === "Escape") {
+      if ($("wn") && $("wn").className === "open") { const b = $("wn").querySelector(".btn.primary"); if (b) b.click(); return; }
+      if (S.pal) { closePalette(); return; }
+      if (S.qa) { if (document.querySelector("#qa .dp-pop:not([hidden])")) return; closeQuick(); return; }
+      if (S.drawer) { if (document.querySelector("#drawer .dp-pop:not([hidden])")) return; closeDrawer(); return; }
+    }
+    if (e.key === "/" && !mod && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || "")) { e.preventDefault(); openPalette(); }
+  });
 
   // ---------- 렌더 ----------
   function renderMenu() {
@@ -2275,6 +2583,8 @@ button.row:hover { background: var(--fill-2); }
     if (!S.clearDrafts && render.scope === scope) main.querySelectorAll("input[id], textarea[id], select[id]").forEach((el) => { if (!["file", "checkbox"].includes(el.type)) keep[el.id] = el.value; });
     S.clearDrafts = false; render.scope = scope;
     main.textContent = "";
+    main.appendChild(topBar());
+    if (S.view === "home" && typeof installNotice === "function") { const n = installNotice(); if (n) main.appendChild(n); }
     if (S.view === "tasks" && S.flash.pc) main.appendChild(flashEl("pc"));
     if (S.mode === "live" && S.canWrite === false) main.appendChild(h("div", { class: "notice" }, "보기 권한으로 열었습니다. 승인, 상태 변경, 새로 만들기를 하려면 PM에게 참여자(Contributor) 권한을 요청하세요."));
     if (APP && APP.projects.length > 1) main.appendChild(h("div", { class: "mproj" }, h("span", { text: "기본 프로젝트" }), h("select", { "aria-label": "기본 프로젝트", onchange: (e) => APP.setCurrentProject(APP.projectId(e.target.value)) }, projSel(curProjName()))));
@@ -2286,10 +2596,22 @@ button.row:hover { background: var(--fill-2); }
       if (!el || el.value === val) continue;
       if (el.__dpSet) el.__dpSet(val); else el.value = val;
     }
+    if (S.drawer && !inLayer()) renderDrawer();
+    if (APP && S.me && S.mode === "live" && !S.wnChecked) { S.wnChecked = true; setTimeout(() => openWhatsNew(), 300); }
   }
   function go(view) { if (location.hash !== `#${view}`) location.hash = view; else { S.view = view; render(); } }
   document.addEventListener("pointerdown", (e) => { if (S.moreOpen && !e.target.closest("#menu")) { S.moreOpen = false; renderMenu(); } });
-  function fromHash() { S.moreOpen = false; const k = location.hash.replace("#", ""); S.view = VIEWS.some(([v]) => v === k) ? k : "home"; render(); window.scrollTo(0, 0); }
+  S.scroll = {}; S.navDepth = 0;
+  function fromHash() {
+    S.moreOpen = false;
+    S.scroll[S.view] = window.scrollY;
+    const k = location.hash.replace("#", ""), prev = S.view;
+    S.view = VIEWS.some(([v]) => v === k) ? k : "home";
+    // 뒤로 가기용 깊이: 기록마다 붙여 두고, 뒤로 가면 그 기록의 값을 읽는다
+    try { if (!history.state || history.state.d === undefined) history.replaceState({ d: prev !== S.view ? S.navDepth + 1 : S.navDepth }, ""); S.navDepth = history.state.d; } catch (e) {}
+    render(); window.scrollTo(0, S.scroll[S.view] || 0);
+  }
+  try { if (!history.state) history.replaceState({ d: 0 }, ""); } catch (e) {}
   window.addEventListener("hashchange", fromHash);
 
   $("refresh").addEventListener("click", () => {

@@ -11,5 +11,10 @@ contextBridge.exposeInMainWorld("oddhr", {
   notify: (title, body) => ipcRenderer.invoke("oddhr:notify", { title, body }),
   onCheckNow: (fn) => ipcRenderer.on("oddhr:check-now", () => fn()),
   oauth: (url, back) => ipcRenderer.invoke("oddhr:oauth", { url, back }),
-  openFolder: (dir) => ipcRenderer.invoke("oddhr:open-folder", dir)
+  openFolder: (dir) => ipcRenderer.invoke("oddhr:open-folder", dir),
+  updateCheck: () => ipcRenderer.invoke("oddhr:update-check"),
+  updateInstall: () => ipcRenderer.invoke("oddhr:update-install"),
+  installProperly: () => ipcRenderer.invoke("oddhr:install-properly"),
+  installState: () => ipcRenderer.sendSync("oddhr:install-state"),
+  onUpdate: (fn) => ipcRenderer.on("oddhr:update", (e, m) => fn(m))
 });

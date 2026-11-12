@@ -39,6 +39,8 @@ jobs:
           git diff --exit-code app/index.html app/desk.js || (echo "app/ 파일이 소스에서 다시 만든 것과 다릅니다. python3 tools/build_ui.py 후 커밋하세요." && exit 1)
       - name: 서버 권한 시험
         run: npm run test:server
+      - name: 자동 업데이트 시험 (지문이 다른 파일은 설치하지 않음)
+        run: npm run test:updater
       - name: 앱 전체 흐름 시험 (PM, 팀원, 아이폰 화면)
         run: |
           npx playwright install --with-deps chromium
@@ -152,6 +154,10 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npm run dist:win
+        env:
+          # 코드 서명 인증서가 있으면 electron-builder가 설치 파일과 앱에 서명한다 (없으면 서명 없이)
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
       - uses: actions/upload-artifact@v4
         with:
           name: ODD-HR-Windows
@@ -186,25 +192,69 @@ jobs:
           done
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: 임시 서명, 서명 검증, zip
+      - name: 서명 (Apple 개발자 인증서가 있으면 Developer ID 서명과 공증, 없으면 임시 서명)
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$MAC_CSC_LINK" ]; then
+            echo "Developer ID로 서명하고 공증합니다"
+            echo "$MAC_CSC_LINK" | base64 --decode > cert.p12
+            security create-keychain -p ci build.keychain && security default-keychain -s build.keychain
+            security unlock-keychain -p ci build.keychain && security set-keychain-settings -t 3600 build.keychain
+            security import cert.p12 -k build.keychain -P "$MAC_CSC_KEY_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k ci build.keychain >/dev/null
+            ID=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application" | head -1 | sed -E 's/.*"(.*)"/\1/')
+            echo "IDENTITY=$ID" >> "$GITHUB_ENV"
+          else
+            echo "IDENTITY=-" >> "$GITHUB_ENV"
+            echo "인증서가 없어 임시 서명합니다 (첫 실행 때 Mac이 확인을 묻습니다)"
+          fi
+      - name: 서명 적용, 서명 검증, zip과 dmg
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
           for pair in "mac-arm64:apple-silicon" "mac:intel"; do
             dir="${pair%%:*}"; name="${pair##*:}"
             A="$(ls -d dist/$dir/*.app | head -1)"
-            codesign --force --sign - "$A/Contents/Resources/agent/odd-hr-agent"
-            codesign --force --deep --sign - "$A"
+            if [ "$IDENTITY" = "-" ]; then
+              codesign --force --sign - "$A/Contents/Resources/agent/odd-hr-agent"
+              codesign --force --deep --sign - "$A"
+            else
+              OPT="--force --timestamp --options runtime --entitlements build/entitlements.mac.plist --sign"
+              codesign $OPT "$IDENTITY" "$A/Contents/Resources/agent/odd-hr-agent"
+              find "$A/Contents/Frameworks" \( -name "*.dylib" -o -name "*.so" \) -exec codesign $OPT "$IDENTITY" {} \;
+              for f in "$A"/Contents/Frameworks/*.framework "$A"/Contents/Frameworks/*.app; do codesign $OPT "$IDENTITY" "$f"; done
+              codesign $OPT "$IDENTITY" "$A"
+              ditto -c -k --keepParent "$A" notarize.zip
+              xcrun notarytool submit notarize.zip --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+              xcrun stapler staple "$A"
+              rm notarize.zip
+            fi
             codesign --verify --deep --strict --verbose=2 "$A"
             ditto -c -k --sequesterRsrc --keepParent "$A" "dist/ODD-HR-$VERSION-mac-$name.zip"
+            # 처음 설치용 dmg: 열면 'ODD HR'을 '응용 프로그램'으로 끌어다 놓는 창
+            rm -rf "dmg-$name" && mkdir "dmg-$name" && cp -R "$A" "dmg-$name/" && ln -s /Applications "dmg-$name/응용 프로그램"
+            hdiutil create -volname "ODD HR" -srcfolder "dmg-$name" -ov -format UDZO "dist/ODD-HR-$VERSION-mac-$name.dmg"
+            [ "$IDENTITY" = "-" ] || codesign --force --sign "$IDENTITY" "dist/ODD-HR-$VERSION-mac-$name.dmg"
+            hdiutil verify "dist/ODD-HR-$VERSION-mac-$name.dmg"
             # 압축을 다시 풀어 서명이 그대로인지 확인
             rm -rf "check-$name" && mkdir "check-$name" && ditto -x -k "dist/ODD-HR-$VERSION-mac-$name.zip" "check-$name"
             codesign --verify --deep --strict "check-$name/$(basename "$A")"
           done
-          ls -la dist/*.zip
+          ls -la dist/*.zip dist/*.dmg
       - uses: actions/upload-artifact@v4
         with:
           name: ODD-HR-Mac
-          path: dist/ODD-HR-*-mac-*.zip
+          path: |
+            dist/ODD-HR-*-mac-*.zip
+            dist/ODD-HR-*-mac-*.dmg
 
   verify:
     name: 무결성 검사
@@ -248,8 +298,9 @@ jobs:
         run: |
           {
             echo "## 받기"
-            echo "- **Windows**: \`ODD-HR-${{ steps.v.outputs.version }}-win.zip\`. 압축을 풀고 \`ODD HR.exe\` 실행 (권장). 설치형은 \`ODD-HR-Setup-${{ steps.v.outputs.version }}.exe\`"
-            echo "- **Mac (M1~M4)**: \`ODD-HR-${{ steps.v.outputs.version }}-mac-apple-silicon.zip\` · **Mac (인텔)**: \`ODD-HR-${{ steps.v.outputs.version }}-mac-intel.zip\`"
+            echo "- **Windows**: \`ODD-HR-Setup-${{ steps.v.outputs.version }}.exe\` (권장). 실행하면 바로 설치되고 시작 메뉴와 '설치된 앱'에 등록됩니다. 설치 없이 쓰려면 \`ODD-HR-${{ steps.v.outputs.version }}-win.zip\`"
+            echo "- **Mac**: \`ODD-HR-${{ steps.v.outputs.version }}-mac-apple-silicon.dmg\` (M1~M4) 또는 \`-mac-intel.dmg\`. 열고 ODD HR을 '응용 프로그램'으로 끌어다 놓기"
+            echo "- 한 번 설치하면 다음부터는 앱을 켤 때 자동으로 업데이트됩니다."
             echo "- **아이폰 · 아이패드**: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/ 를 Safari로 열고 공유 → 홈 화면에 추가"
             echo ""
             echo "## 무결성 검사를 통과한 파일입니다"
@@ -270,6 +321,7 @@ jobs:
           body_path: notes.md
           files: |
             verified/*.zip
+            verified/*.dmg
             verified/*.exe
             verified/SHA256SUMS.txt
 

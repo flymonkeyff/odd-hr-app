@@ -1,7 +1,7 @@
 {
   "name": "odd-hr",
   "productName": "ODD HR",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "ODD HR: 팀 AX 앱 (아침상, 알림, 작업, 할 일, 메시지, 드라이브, 미팅·회의록, 목표, 팀원, 카톡 에이전트)",
   "author": "ODD",
   "license": "UNLICENSED",
@@ -16,7 +16,8 @@
     "dist:win": "npm run vendor && electron-builder --win --x64 --publish never",
     "dist:mac": "npm run vendor && electron-builder --mac --universal --publish never",
     "web": "npm run vendor && node tools/build_web.js",
-    "verify": "node tools/verify_release.js"
+    "verify": "node tools/verify_release.js",
+    "test:updater": "node test/updater.test.js"
   },
   "devDependencies": {
     "@supabase/supabase-js": "2.45.4",
@@ -37,6 +38,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "app/**",
       "build/icon.png",
       "build/tray.png",
@@ -72,15 +74,19 @@
         }
       ],
       "icon": "build/icon.png",
-      "artifactName": "ODD-HR-${version}-win.${ext}"
+      "artifactName": "ODD-HR-${version}-win.${ext}",
+      "legalTrademarks": "ODD"
     },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
+      "allowElevation": false,
       "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
       "shortcutName": "ODD HR",
       "uninstallDisplayName": "ODD HR",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
       "language": "1042",
       "artifactName": "ODD-HR-Setup-${version}.exe"
     },
@@ -96,7 +102,12 @@
       "icon": "build/icon.png",
       "category": "public.app-category.productivity",
       "identity": null,
-      "artifactName": "ODD-HR-${version}-mac.dmg"
+      "artifactName": "ODD-HR-${version}-mac.dmg",
+      "minimumSystemVersion": "11.0",
+      "extendInfo": {
+        "LSApplicationCategoryType": "public.app-category.productivity",
+        "NSAppleEventsUsageDescription": "카톡 점검(Mac)에서 카카오톡 창을 읽을 때 씁니다."
+      }
     },
     "dmg": {
       "title": "ODD HR"

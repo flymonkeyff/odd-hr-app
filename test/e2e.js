@@ -331,6 +331,92 @@ const ok = (c, m) => { if (c) { pass++; console.log("  O", m); } else { fail++; 
   const padTop = await pm.evaluate(() => parseFloat(getComputedStyle(document.querySelector("nav.side")).paddingTop));
   ok(padTop >= 50, `Mac에서 메뉴가 창 버튼 아래로 내려간다 (${padTop}px)`);
 
+
+  // ------------------------------------------------------------ 0.3.0 흐름 끊김 없애기
+  const hashOf = (p) => p.evaluate(() => location.hash);
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+
+  console.log("어디서나 만들기 (Ctrl/⌘+N): 화면을 떠나지 않는다");
+  await fresh(ed); await go(ed, "drive");
+  await ed.keyboard.press(`${mod}+n`); await ed.waitForTimeout(200);
+  ok(await ed.isVisible("#qa .modal"), "단축키로 새로 만들기 창이 뜬다");
+  await ed.fill("#qatext", "자막 오탈자 한 번 더 보기"); await ed.keyboard.press("Enter"); await ed.waitForTimeout(500);
+  const qt = (await asAdmin(`select id, data from docs where collection='tasks' and data->>'할 일'='자막 오탈자 한 번 더 보기'`))[0];
+  ok(qt && qt.data["담당자"] === "홍길동" && qt.data["상태"] === "대기", "내 할 일로 바로 들어간다");
+  ok((await hashOf(ed)) === "#drive" && !(await ed.isVisible("#qa .modal")), "보던 드라이브 화면 그대로");
+  ok((await ed.textContent("#toast")).includes("내 할 일에 넣었습니다"), "아래 토스트로 결과를 알린다");
+
+  console.log("찾기 (Ctrl/⌘+K) → 옆 패널");
+  await ed.keyboard.press(`${mod}+k`); await ed.waitForTimeout(150);
+  await ed.fill("#palq", "자막 오탈자"); await ed.waitForTimeout(150);
+  ok((await ed.textContent("#pal .pal-item[aria-selected=true]")).includes("자막 오탈자 한 번 더 보기"), "할 일이 맨 위로 찾아진다");
+  await ed.keyboard.press("Enter"); await ed.waitForTimeout(300);
+  ok(await ed.isVisible("#drawer .sheet") && (await ed.inputValue("#dwtitle")) === "자막 오탈자 한 번 더 보기", "엔터를 누르면 옆 패널로 열린다");
+  ok((await hashOf(ed)) === "#drive", "화면은 그대로");
+  await shot(ed, "19-drawer");
+
+  console.log("옆 패널에서 상태 바꾸기 → 되돌리기");
+  await ed.click('#drawer .seg button:text-is("진행")'); await ed.waitForTimeout(500);
+  ok((await asAdmin(`select data->>'상태' s from docs where collection='tasks' and data->>'할 일'='자막 오탈자 한 번 더 보기'`))[0].s === "진행", "상태가 바로 바뀐다");
+  await ed.click('#toast button:text-is("되돌리기")'); await ed.waitForTimeout(500);
+  ok((await asAdmin(`select data->>'상태' s from docs where collection='tasks' and data->>'할 일'='자막 오탈자 한 번 더 보기'`))[0].s === "대기", "되돌리기로 원래대로 돌아간다");
+
+  console.log("옆 패널: 이 일에 대한 대화");
+  await ed.selectOption("#dwto", `d:${pmUid}`);
+  await ed.fill("#dwmsg", "이거 오늘 안에 볼게요"); await ed.press("#dwmsg", "Enter"); await ed.waitForTimeout(500);
+  const tm = (await asAdmin(`select data from docs where collection='messages' and data ? 'task' order by created_at desc limit 1`))[0];
+  ok(tm && tm.data.task === qt.id && tm.data.to === pmUid && tm.data.text.includes("「자막 오탈자 한 번 더 보기」"), "할 일에 묶인 1:1 메시지가 간다");
+  ok((await ed.textContent("#drawer .dw-talk")).includes("이거 오늘 안에 볼게요"), "패널 안 대화에 바로 보인다");
+  await ed.keyboard.press("Escape"); await ed.waitForTimeout(150);
+  ok(!(await ed.isVisible("#drawer .sheet")), "Esc로 닫힌다");
+
+  console.log("알림 줄에서 바로 처리 (PM: 검토 승인)");
+  const upErr = await ed.evaluate(async (id) => { try { await window.oddhrApp.db.collection("tasks").doc(id).update({ "상태": "검토 요청", "상태 변경": new Date().toISOString(), "상태 변경자": window.oddhrApp.uid, "상태 변경자 이름": "홍길동" }); return null; } catch (e) { return JSON.stringify(e) + String(e.message); } }, qt.id);
+  ok(!upErr, `팀원이 검토 요청을 올린다${upErr ? " (" + upErr + ")" : ""}`);
+  await fresh(pm); await go(pm, "home");
+  const row = '.notif-row:has-text("검토를 요청했습니다")';
+  ok(await pm.isVisible(`${row} button:text-is("승인")`), "알림 줄에 승인 버튼이 있다");
+  await pm.click(`${row} button:text-is("승인")`); await pm.waitForTimeout(500);
+  ok((await asAdmin(`select data->>'상태' s from docs where id='${qt.id}'`))[0].s === "완료" && (await hashOf(pm)) === "#home", "홈을 떠나지 않고 승인된다");
+  await shot(pm, "20-notif-inline");
+
+  console.log("PM 업무 요청 (새로 만들기) → 팀원 알림 줄에서 수락");
+  await pm.click('.topbar button:has-text("새로 만들기")'); await pm.waitForTimeout(150);
+  await pm.click('#qa .seg button:text-is("업무 요청")'); await pm.waitForTimeout(100);
+  await pm.fill("#qatext", "썸네일 B안 만들기"); await pm.selectOption("#qawho", "홍길동");
+  await pm.click('#qa button[type=submit]'); await pm.waitForTimeout(500);
+  const rq = (await asAdmin(`select id, data from docs where collection='tasks' and data->>'할 일'='썸네일 B안 만들기'`))[0];
+  ok(rq && rq.data["상태"] === "제안" && rq.data["출처"] === "PM 제안" && rq.data["담당자"] === "홍길동", "PM이 그 자리에서 업무 요청을 보낸다");
+  await fresh(ed); await go(ed, "home");
+  const rrow = '.notif-row:has-text("업무를 요청했습니다")';
+  await ed.click(`${rrow} button:text-is("수락")`); await ed.waitForTimeout(500);
+  ok((await asAdmin(`select data->>'상태' s from docs where id='${rq.id}'`))[0].s === "진행", "팀원이 알림 줄에서 바로 수락한다");
+
+  console.log("찾기 → 사람 → 메시지 패널");
+  await ed.keyboard.press(`${mod}+k`); await ed.fill("#palq", "김피엠"); await ed.waitForTimeout(150);
+  await ed.click('#pal .pal-item:has-text("메시지 보내기")'); await ed.waitForTimeout(300);
+  ok(await ed.isVisible("#drawer #dchatin"), "사람을 고르면 1:1 메시지 패널이 열린다");
+  await ed.fill("#dchatin", "패널에서 보낸 메시지"); await ed.press("#dchatin", "Enter"); await ed.waitForTimeout(500);
+  ok((await asAdmin(`select count(*)::int n from docs where collection='messages' and data->>'text'='패널에서 보낸 메시지' and data->>'to'='${pmUid}'`))[0].n === 1, "보낸 메시지가 저장된다");
+  await ed.keyboard.press("Escape");
+
+  console.log("보던 자리 기억, 뒤로");
+  await go(ed, "todo"); await ed.evaluate(() => window.scrollTo(0, 400)); await ed.waitForTimeout(100);
+  const y0 = await ed.evaluate(() => window.scrollY);
+  await ed.click('.menu a[href="#messages"]'); await ed.waitForTimeout(300);
+  ok(await ed.isVisible('.topbar button:has-text("뒤로")'), "다른 화면으로 가면 '뒤로'가 생긴다");
+  await ed.click('.topbar button:has-text("뒤로")'); await ed.waitForTimeout(400);
+  ok((await hashOf(ed)) === "#todo" && Math.abs((await ed.evaluate(() => window.scrollY)) - y0) < 30, `뒤로 가면 보던 자리로 돌아온다 (${y0}px)`);
+
+  console.log("업데이트 뒤 처음 켤 때 새 기능");
+  await ed.evaluate(() => localStorage.setItem("oddhr.seenVersion", "0.0.1"));
+  await fresh(ed); await ed.waitForTimeout(500);
+  ok(await ed.isVisible("#wn .modal"), "새 기능 창이 뜬다");
+  ok((await ed.textContent("#wn")).includes("옆 패널") && (await ed.textContent("#wn")).includes("자동 업데이트"), "이번 버전에서 바뀐 것을 보여 준다");
+  await shot(ed, "21-whats-new");
+  await ed.click('#wn button:text-is("시작하기")'); await fresh(ed); await ed.waitForTimeout(400);
+  ok(!(await ed.isVisible("#wn .modal")), "한 번 보면 다시 뜨지 않는다");
+
   console.log("아이폰 화면");
   const phoneCtx = await browser.newContext({ ...require("playwright").devices["iPhone 13"], timezoneId: "Asia/Seoul", bypassCSP: true });
   await phoneCtx.exposeFunction("__sql", sql); await phoneCtx.exposeFunction("__agent", agent); await phoneCtx.exposeFunction("__store", store);
