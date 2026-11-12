@@ -153,11 +153,14 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npm run dist:win
+      - shell: bash
         env:
           # 코드 서명 인증서가 있으면 electron-builder가 설치 파일과 앱에 서명한다 (없으면 서명 없이)
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          LINK: ${{ secrets.WIN_CSC_LINK }}
+          PASS: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          if [ -n "$LINK" ]; then export WIN_CSC_LINK="$LINK" WIN_CSC_KEY_PASSWORD="$PASS"; else echo "서명 인증서 없음: 서명 없이 만든다"; fi
+          npm run dist:win
       - uses: actions/upload-artifact@v4
         with:
           name: ODD-HR-Windows
