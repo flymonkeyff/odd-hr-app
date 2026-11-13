@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("oddhr", {
   notify: (title, body) => ipcRenderer.invoke("oddhr:notify", { title, body }),
   onCheckNow: (fn) => ipcRenderer.on("oddhr:check-now", () => fn()),
   oauth: (url, back) => ipcRenderer.invoke("oddhr:oauth", { url, back }),
+  saveFile: (name, bytes) => ipcRenderer.invoke("oddhr:save-file", { name, bytes }),
+  showItem: (p) => ipcRenderer.invoke("oddhr:show-item", p),
   openFolder: (dir) => ipcRenderer.invoke("oddhr:open-folder", dir),
   updateCheck: () => ipcRenderer.invoke("oddhr:update-check"),
   updateInstall: () => ipcRenderer.invoke("oddhr:update-install"),

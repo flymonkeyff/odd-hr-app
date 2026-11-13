@@ -640,6 +640,7 @@ NEW_VIEWS = r'''
       !APP.isAnon ? h("div", { class: "actions" }, h("button", { class: "btn", type: "button", text: "새 프로젝트 만들기", onclick: () => APP.showCreateProject() }), h("span", { class: "msg", style: "color:var(--muted)", text: "만들면 입장 코드가 바로 나옵니다. 코드는 팀원 탭에서도 봅니다." })) : null);
 
     const agentBox = APP.agentAvailable && APP.isPMAny() ? agentSettings() : null;
+    const finishBox = finishSettings();
 
     // 다른 기기에서 같은 사람으로 쓰기: 코드 계정에 이메일을 연결한다
     const link = APP.isAnon ? h("section", { class: "box" }, h("h2", {}, "이메일 연결", h("span", { class: "pill risk", text: "권장" })),
@@ -686,7 +687,77 @@ NEW_VIEWS = r'''
         h("button", { class: "btn", type: "button", text: "새 기능 보기", onclick: () => openWhatsNew(true) }),
         !inst.installed && NV.installProperly ? h("button", { class: "btn primary", type: "button", disabled: !!U.busy, text: "제대로 설치하기", title: "설치된 앱과 시작 메뉴에 등록하고 자동 업데이트를 켭니다", onclick: async () => { U.busy = true; U.text = "설치 파일을 받는 중…"; render(); const r = await NV.installProperly(); if (!r.ok) { U.busy = false; U.text = `설치하지 못했습니다: ${r.error}`; render(); } } }) : null),
       !inst.installed ? h("div", { class: "notice", text: "지금은 압축을 풀어 켠 상태라 Windows '설치된 앱'과 시작 메뉴에 없습니다. '제대로 설치하기'를 누르면 설치 프로그램으로 깔고 다시 켭니다. 기록은 그대로입니다." }) : null) : null;
-    return [pageHead("설정", "화면 모드, 키 컬러, 알림은 이 기기에만 저장됩니다."), link, updates, looks, alerts, profile, projects, mobile, agentBox, account];
+    return [pageHead("설정", "화면 모드, 키 컬러, 알림은 이 기기에만 저장됩니다."), link, updates, looks, alerts, profile, projects, finishBox, mobile, agentBox, account];
+  }
+
+  // ---------- 프로젝트 끝내기 (PM) : 작업 과정을 zip으로 저장하고 끝낸다 ----------
+  function finishSettings() {
+    const mineAsPM = (p) => APP.members.some((m) => m.project_id === p.id && m.user_id === APP.uid && m.is_pm);
+    const active = APP.projects.filter(mineAsPM);
+    const ended = (APP.archived || []).filter(mineAsPM);
+    if (!active.length && !ended.length) return null;
+    const F = S.fin || (S.fin = {});
+    const say = (t) => { F.text = t; const el = $("fintext"); if (el) el.textContent = t; };
+    const reset = () => { S.fin = {}; render(); };
+    const done = (msg, path) => { S.fin = { doneMsg: msg, path }; render(); };
+    async function save(pid) {
+      F.busy = true; F.err = ""; say("작업 과정을 모으는 중"); render();
+      try {
+        const z = await APP.exportProject(pid, say);
+        say("저장할 곳을 고르는 중");
+        const r = await APP.saveLocal(z.blob, z.fileName);
+        F.busy = false;
+        if (r.canceled) { F.step = "ask"; F.err = "저장을 취소했습니다. 다시 고르세요."; render(); return null; }
+        F.missed = z.missed;
+        return r;
+      } catch (e) { F.busy = false; F.err = errText(e); render(); return null; }
+    }
+    async function finish(pid, path) {
+      F.busy = true; say("프로젝트를 끝내는 중"); render();
+      try {
+        const left = await APP.finishProject(pid);
+        if (!left) { location.reload(); return; }
+        done(`'${APP.projectName(pid) || F.name}' 프로젝트를 끝냈습니다.${path ? " 작업 과정은 저장한 곳에 있습니다." : ""}`, path);
+      } catch (e) { F.busy = false; F.err = errText(e); render(); }
+    }
+    const rowFor = (p) => {
+      const open = F.pid === p.id;
+      const head = h("div", { class: "row", style: "grid-template-columns:minmax(0,1fr) auto" },
+        h("div", {}, h("div", { class: "t", text: p.name }), h("div", { class: "m", text: p.deadline ? `마감 ${p.deadline}` : "진행 중" })),
+        open ? h("span") : h("button", { class: "btn small danger", type: "button", disabled: !!F.busy, text: "프로젝트 끝내기", onclick: () => { S.fin = { pid: p.id, name: p.name, step: "ask" }; render(); } }));
+      if (!open) return head;
+      let body;
+      if (F.busy) body = h("div", { class: "notice" }, h("div", { id: "fintext", text: F.text || "잠시만요" }), h("div", { class: "msg", style: "color:var(--muted)", text: "드라이브 파일이 많으면 조금 걸립니다. 창을 닫지 마세요." }));
+      else if (F.step === "web") body = h("div", { class: "notice" },
+        h("strong", { text: "내려받기를 시작했습니다." }),
+        h("p", { text: "아이폰·아이패드는 '파일' 앱의 다운로드 폴더에 저장됩니다. 저장된 것을 확인했으면 끝내기를 누르세요." }),
+        h("div", { class: "actions", style: "margin-top:8px" },
+          h("button", { class: "btn small danger", type: "button", text: "프로젝트 끝내기", onclick: () => finish(p.id) }),
+          h("button", { class: "btn small", type: "button", text: "다시 저장", onclick: async () => { const r = await save(p.id); if (r) { F.step = "web"; render(); } } }),
+          h("button", { class: "btn small", type: "button", text: "취소", onclick: reset })));
+      else body = h("div", { class: "notice" },
+        h("strong", { text: "작업 과정을 저장하시겠습니까?" }),
+        h("p", { text: "할 일, 목표, 미팅, 메시지, 주간 업데이트, 양식, 드라이브 파일을 압축 파일(zip) 하나로 이 기기에 저장합니다. 끝낸 뒤에도 서버의 기록은 지워지지 않고, 아래 '끝낸 프로젝트'에서 다시 열 수 있습니다." }),
+        h("p", { class: "msg", style: "color:var(--muted)", text: "끝내면 팀원 화면에서 이 프로젝트가 빠지고, 입장 코드로 더 들어올 수 없습니다." }),
+        F.err ? h("div", { class: "msg err", role: "status", text: F.err }) : null,
+        h("div", { class: "actions", style: "margin-top:8px" },
+          h("button", { class: "btn small primary", type: "button", "data-autofocus": "", text: "저장하고 끝내기", onclick: async () => { const r = await save(p.id); if (!r) return; if (r.web) { F.step = "web"; render(); return; } await finish(p.id, r.path); } }),
+          h("button", { class: "btn small danger", type: "button", text: "저장하지 않고 끝내기", onclick: () => finish(p.id) }),
+          h("button", { class: "btn small", type: "button", text: "취소", onclick: reset })));
+      return h("div", {}, head, body);
+    };
+    return h("section", { class: "box" }, h("h2", {}, "프로젝트 끝내기", h("span", { class: "pill", text: "PM" })),
+      h("p", { class: "sub", text: "프로젝트가 끝나면 끝내기를 누르세요. 그동안의 작업 과정을 압축 파일로 저장할 수 있습니다." }),
+      F.doneMsg ? h("div", { class: "msg ok", role: "status" }, F.doneMsg, F.path && APP.showSaved ? h("button", { class: "btn small", type: "button", style: "margin-left:8px", text: "저장한 곳 열기", onclick: () => APP.showSaved(F.path) }) : null) : null,
+      F.busy && !active.some((p) => p.id === F.pid) ? h("div", { class: "notice" }, h("div", { id: "fintext", text: F.text || "잠시만요" })) : null,
+      F.err && !active.some((p) => p.id === F.pid) ? h("div", { class: "msg err", role: "status", text: F.err }) : null,
+      active.length ? h("div", { class: "rows" }, active.map(rowFor)) : null,
+      ended.length ? h("details", { open: !!F.endedOpen, ontoggle: (e) => { F.endedOpen = e.target.open; } }, h("summary", { text: `끝낸 프로젝트 ${ended.length}개` }),
+        h("div", { class: "rows" }, ended.map((p) => h("div", { class: "row", style: "grid-template-columns:minmax(0,1fr) auto auto" },
+          h("div", {}, h("div", { class: "t", text: p.name }), h("div", { class: "m", text: "끝남 · 기록은 서버에 남아 있습니다" })),
+          h("button", { class: "btn small", type: "button", disabled: !!F.busy, text: "작업 과정 저장", onclick: async () => { S.fin = { pid: p.id, name: p.name, endedOpen: true }; const r = await save(p.id); if (r) done(r.web ? "내려받기를 시작했습니다." : "작업 과정을 저장했습니다.", r.path); } }),
+          h("button", { class: "btn small", type: "button", disabled: !!F.busy, text: "다시 열기", onclick: () => act("fin", () => APP.reopenProject(p.id), `'${p.name}'을 다시 열었습니다.`) })))),
+        flashEl("fin")) : null);
   }
 
   function agentSettings() {

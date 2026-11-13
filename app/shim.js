@@ -87,6 +87,7 @@
     ]);
     if (e1 || e2) throw e1 || e2;
     App.projects = (ps || []).filter((p) => !p.archived);
+    App.archived = (ps || []).filter((p) => p.archived);        // 끝낸 프로젝트 (PM이 다시 열 수 있다)
     App.members = ms || [];
     const saved = localStorage.getItem("oddhr.project");
     App.currentProject = App.projects.some((p) => p.id === saved) ? saved : (App.projects[0] || {}).id || null;
@@ -140,7 +141,7 @@
   const colName = (path) => (/^data\/users\//.test(path) ? "quick" : path);
   const ALL_COLS = ["tasks", "goals", "meetings", "flags", "quick", "messages", "files", "weekly"];
   const snap = (collection) => ({
-    docs: [...rows.values()].filter((r) => r.collection === collection).map((r) => ({
+    docs: [...rows.values()].filter((r) => r.collection === collection && App.projects.some((p) => p.id === r.project_id)).map((r) => ({
       id: r.id, exists: true, metadata: { fromCache: false },
       data: () => ({ ...r.data, "프로젝트": App.projectName(r.project_id) || r.data["프로젝트"] || "", _owner: r.owner, _pid: r.project_id, _at: r.created_at })
     })),
@@ -257,6 +258,182 @@
       if (error) throw asErr(error);
     }
   };
+  // ---------------------------------------------------------------- 프로젝트 끝내기 · 작업 과정 저장 (zip)
+  // 서버의 기록은 지우지 않는다. 끝내면 목록에서 빠지고 코드로 못 들어오며, PM이 설정에서 다시 열 수 있다.
+  App.finishProject = async (pid) => {
+    const { data, error } = await sb.from("projects").update({ archived: true }).eq("id", pid).select();
+    if (error) throw asErr(error);
+    if (!data || !data.length) throw { code: "local", message: "PM만 프로젝트를 끝낼 수 있습니다." };
+    await loadProjects(); ALL_COLS.forEach(emitCol); App.emit(); return App.projects.length;
+  };
+  App.reopenProject = async (pid) => {
+    const { data, error } = await sb.from("projects").update({ archived: false }).eq("id", pid).select();
+    if (error) throw asErr(error);
+    if (!data || !data.length) throw { code: "local", message: "PM만 다시 열 수 있습니다." };
+    await loadProjects(); ALL_COLS.forEach(emitCol); App.setCurrentProject(pid);
+  };
+
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = (u8) => { let c = 0xffffffff; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const enc = new TextEncoder();
+  const NO_SQUEEZE = /\.(jpe?g|png|gif|webp|heic|mp4|mov|m4v|avi|mkv|mp3|m4a|aac|wav|zip|7z|rar|gz|pdf|psd|ai|prproj|aep|docx|xlsx|pptx|hwp)$/i;
+  async function deflateRaw(u8) {
+    if (typeof CompressionStream === "undefined") return null;
+    try { return new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer()); } catch (e) { return null; }
+  }
+  // 파일 목록 [{name, data(Uint8Array|string), date}] → zip Blob (한글 파일 이름은 UTF-8 표시)
+  async function makeZip(entries, onStep) {
+    const parts = [], central = [];
+    let offset = 0, i = 0;
+    for (const e of entries) {
+      const raw = typeof e.data === "string" ? enc.encode(e.data) : e.data;
+      const name = enc.encode(e.name);
+      let body = raw, method = 0;
+      if (!NO_SQUEEZE.test(e.name) && raw.length > 256) { const z = await deflateRaw(raw); if (z && z.length < raw.length) { body = z; method = 8; } }
+      const d = e.date instanceof Date && !isNaN(e.date) ? e.date : new Date();
+      const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+      const dosDate = ((Math.max(1980, d.getFullYear()) - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+      const crc = crc32(raw);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, method, true);
+      lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
+      lh.setUint32(18, body.length, true); lh.setUint32(22, raw.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      parts.push(lh.buffer, name, body);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, method, true);
+      ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true); ch.setUint32(20, body.length, true); ch.setUint32(24, raw.length, true);
+      ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+      central.push(ch.buffer, name);
+      offset += 30 + name.length + body.length;
+      if (onStep) onStep(++i, entries.length);
+    }
+    const cdSize = central.reduce((s, p) => s + (p.byteLength || p.length), 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+    end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, end.buffer], { type: "application/zip" });
+  }
+  App._makeZip = makeZip;
+
+  const safeName = (s, n) => String(s || "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, n || 60) || "이름 없음";
+  const csvCell = (v) => { const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const toCsv = (list) => { const keys = []; list.forEach((r) => Object.keys(r).forEach((k) => { if (!keys.includes(k)) keys.push(k); })); return "﻿" + [keys.map(csvCell).join(","), ...list.map((r) => keys.map((k) => csvCell(r[k])).join(","))].join("\r\n"); };
+  const fmt = (v) => (v == null ? "" : typeof v === "object" ? JSON.stringify(v, null, 1) : String(v));
+  const dt = (s) => { const d = new Date(s); return isNaN(d) ? "" : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  const LONG = ["노트", "내용", "본문", "회의록", "아젠다", "메모", "설명", "text"];
+  const TITLE = ["제목", "할 일", "목표", "이름", "주차", "종류"];
+  const docMd = (r, who) => {
+    const d = r.data || {};
+    const title = TITLE.map((k) => d[k]).find((x) => x && typeof x === "string") || r.id;
+    const lines = [`# ${title}`, "", `- 만든 사람: ${who(r.owner)}`, `- 만든 때: ${dt(r.created_at)}`, `- 마지막 수정: ${dt(r.updated_at)}`];
+    Object.entries(d).forEach(([k, v]) => { if (!LONG.includes(k) && v !== "" && v != null) lines.push(`- ${k}: ${fmt(v).replace(/\n/g, " ")}`); });
+    LONG.forEach((k) => { if (d[k]) lines.push("", `## ${k}`, "", fmt(d[k])); });
+    return lines.join("\n") + "\n";
+  };
+
+  // 프로젝트의 작업 과정 전체를 zip 하나로 (서버에서 새로 읽는다. 이 계정이 볼 수 있는 것만 담긴다)
+  App.exportProject = async (pid, onProgress) => {
+    const say = (t) => { if (onProgress) onProgress(t); };
+    const proj = [...App.projects, ...(App.archived || [])].find((p) => p.id === pid);
+    if (!proj) throw { code: "local", message: "프로젝트를 찾지 못했습니다." };
+    say("기록을 읽는 중");
+    const docs = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await sb.from("docs").select("*").eq("project_id", pid).order("created_at").range(from, from + 999);
+      if (error) throw asErr(error);
+      docs.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    const { data: mem, error: me } = await sb.from("members").select("*").eq("project_id", pid);
+    if (me) throw asErr(me);
+    const members = mem || [];
+    const who = (uid) => { const m = members.find((x) => x.user_id === uid); return m ? `${m.name}(${m.role})` : "나간 사람"; };
+    const by = (c) => docs.filter((r) => r.collection === c);
+    const root = safeName(proj.name) + "/";
+    const out = [];
+    const put = (name, data, date) => out.push({ name: root + name, data, date: date ? new Date(date) : new Date() });
+
+    const NAMES = { tasks: "할 일", goals: "목표", meetings: "미팅", flags: "확인할 것", quick: "내 메모", messages: "메시지", files: "드라이브", weekly: "주간 업데이트", forms: "양식" };
+    const cnt = Object.keys(NAMES).map((c) => [NAMES[c], by(c).length]).filter(([, n]) => n);
+    put("읽어 보기.txt", [
+      `ODD HR 작업 과정 · ${proj.name}`, "",
+      `저장한 때: ${dt(new Date())}`, `저장한 사람: ${who(App.uid)}`,
+      `프로젝트 시작: ${dt(proj.created_at)}`, proj.deadline ? `마감: ${proj.deadline}${proj.deadline_label ? " (" + proj.deadline_label + ")" : ""}` : "", "",
+      "팀원", ...members.map((m) => `- ${m.name} · ${m.role}${m.is_pm && m.role !== "PM" ? " · PM" : ""}${m.stage ? " · 마지막 단계: " + m.stage : ""}`), "",
+      "담긴 것", ...cnt.map(([n, c]) => `- ${n}: ${c}개`), "",
+      "폴더 안내",
+      "- 할 일.csv, 목표.csv: 엑셀이나 구글 시트로 열 수 있습니다",
+      "- 미팅, 주간 업데이트, 양식: 문서마다 .md 파일 (메모장으로 열립니다)",
+      "- 메시지: 대화방과 1:1 대화를 시간순으로",
+      "- 드라이브: 올린 파일 원본과 링크 목록",
+      "- 원본 데이터: 모든 기록을 그대로 (JSON)", "",
+      "1:1 메시지는 저장한 사람이 주고받은 것만 담깁니다."
+    ].filter((x) => x !== null).join("\r\n"));
+
+    put("팀원.csv", toCsv(members.map((m) => ({ "이름": m.name, "역할": m.role, PM: m.is_pm ? "예" : "", "단계": m.stage || "", "단계 메모": m.stage_note || "", "들어온 때": dt(m.joined_at) }))));
+    ["tasks", "goals", "flags"].forEach((c) => { const l = by(c); if (l.length) put(`${NAMES[c]}.csv`, toCsv(l.map((r) => ({ ...r.data, "만든 사람": who(r.owner), "만든 때": dt(r.created_at), "마지막 수정": dt(r.updated_at) })))); });
+    ["meetings", "weekly", "forms"].forEach((c) => {
+      const used = new Set();
+      by(c).forEach((r) => {
+        const d = r.data || {};
+        let base = safeName(`${(d["일시"] || r.created_at || "").slice(0, 10)} ${TITLE.map((k) => d[k]).find((x) => x && typeof x === "string") || r.id}`, 70);
+        let n = base, k = 2; while (used.has(n)) n = `${base} (${k++})`; used.add(n);
+        put(`${NAMES[c]}/${n}.md`, docMd(r, who), r.updated_at);
+      });
+    });
+    const msgs = by("messages");
+    if (msgs.length) {
+      const line = (r) => `[${dt(r.created_at)}] ${who(r.owner)}: ${fmt((r.data || {}).text)}`;
+      const room = msgs.filter((r) => !(r.data || {}).to);
+      if (room.length) put("메시지/프로젝트 대화방.txt", room.map(line).join("\r\n"));
+      const pairs = {};
+      msgs.filter((r) => (r.data || {}).to).forEach((r) => { const other = r.owner === App.uid ? r.data.to : r.owner; (pairs[other] = pairs[other] || []).push(r); });
+      Object.entries(pairs).forEach(([uid, l]) => put(`메시지/1대1 - ${safeName(who(uid), 40)}.txt`, l.map(line).join("\r\n")));
+    }
+    const files = by("files");
+    const links = files.filter((r) => (r.data || {})["종류"] === "링크");
+    if (links.length) put("드라이브/링크 목록.txt", links.map((r) => `${r.data["이름"] || ""}\t${r.data["주소"] || ""}\t${r.data["폴더"] || ""}\t${r.data["메모"] || ""}`).join("\r\n"));
+    const real = files.filter((r) => (r.data || {})["경로"]);
+    const missed = [];
+    const usedF = new Set();
+    for (let i = 0; i < real.length; i++) {
+      const d = real[i].data;
+      say(`드라이브 파일 받는 중 ${i + 1}/${real.length}`);
+      try {
+        const b = await App.files.blob(d["경로"]);
+        let n = `드라이브/${safeName(d["폴더"] || "기타", 30)}/${safeName(d["이름"], 120)}`, k = 2;
+        const dot = n.lastIndexOf("."); while (usedF.has(n)) { n = dot > 0 ? `${n.slice(0, dot)} (${k})${n.slice(dot)}` : `${n} (${k})`; k++; }
+        usedF.add(n);
+        put(n, new Uint8Array(await b.arrayBuffer()), d.at || real[i].created_at);
+      } catch (e) { missed.push(d["이름"] || d["경로"]); }
+    }
+    if (missed.length) put("드라이브/받지 못한 파일.txt", missed.join("\r\n"));
+    Object.keys(NAMES).forEach((c) => { const l = by(c); if (l.length) put(`원본 데이터/${c}.json`, JSON.stringify(l.map((r) => ({ id: r.id, collection: r.collection, data: r.data, owner: who(r.owner), created_at: r.created_at, updated_at: r.updated_at })), null, 1)); });
+    put("원본 데이터/project.json", JSON.stringify({ project: proj, members: members.map((m) => ({ ...m, user_id: undefined })) }, null, 1));
+
+    say("압축하는 중");
+    const blob = await makeZip(out, (i, n) => say(`압축하는 중 ${i}/${n}`));
+    const d = new Date();
+    const fileName = `${safeName(proj.name, 50)} 작업 과정 ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}.zip`;
+    return { blob, fileName, count: out.length, missed: missed.length };
+  };
+
+  // 기기에 저장: 데스크톱은 저장 위치를 묻는 창, 웹은 내려받기 (아이폰은 '파일' 앱)
+  App.saveLocal = async (blob, fileName) => {
+    if (native.saveFile) {
+      const r = await native.saveFile(fileName, new Uint8Array(await blob.arrayBuffer()));
+      if (!r || r.canceled) return { ok: false, canceled: true };
+      if (!r.ok) throw { code: "local", message: r.error || "저장하지 못했습니다." };
+      return { ok: true, path: r.path };
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = fileName; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+    return { ok: true, web: true };
+  };
+  App.showSaved = (p) => (native.showItem ? native.showItem(p) : null);
+
   // 알림 (데스크톱 앱은 운영체제 알림, 웹은 화면 안 알림만)
   App.notify = (title, body) => {
     try {
@@ -461,6 +638,7 @@
     const label = el("input", { id: "g-label", placeholder: "예: 편집 완료, 접수 마감", maxlength: "40" });
     const m = msgBox();
     const go = el("button", { class: "btn primary", type: "submit", text: "프로젝트 만들기" });
+    const ended = first ? (App.archived || []).filter((p) => isPM(p.id)) : [];
     frame(first ? "첫 프로젝트 만들기" : "새 프로젝트", "만들면 팀원에게 나눠 줄 입장 코드가 바로 나옵니다.",
       el("form", { class: "gate-form", onsubmit: async (e) => {
         e.preventDefault();
@@ -469,6 +647,12 @@
         try { const r = await App.createProject({ name: name.value.trim(), myName: me.value.trim(), deadline: due.value, label: label.value.trim() }); screenCode(r.code, name.value.trim()); }
         catch (err) { m.textContent = (err && err.message) || "만들지 못했습니다."; busy(go, false, "프로젝트 만들기"); }
       } }, field("프로젝트 이름", name), field("내 이름", me), el("div", { class: "gate-row" }, field("마감일 (선택)", due), field("마감 이름 (선택)", label)), m, el("div", { class: "gate-actions" }, go)),
+      ended.length ? el("div", { class: "gate-alt", style: "display:grid;gap:6px;text-align:left" }, el("span", { text: "끝낸 프로젝트 다시 열기" }),
+        ...ended.map((p) => el("button", { class: "btn", type: "button", text: `${p.name} 다시 열기`, onclick: async (e) => {
+          busy(e.target, true, "여는 중");
+          try { await App.reopenProject(p.id); await loadDocs(); listen(); gate.remove(); resolveReady(); App.emit(); }
+          catch (err) { m.textContent = (err && err.message) || "열지 못했습니다."; busy(e.target, false, `${p.name} 다시 열기`); }
+        } }))) : null,
       el("div", { class: "gate-alt" }, el("button", { class: "linkish", type: "button", text: "로그아웃", onclick: () => App.signOut() })));
   }
 

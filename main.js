@@ -139,6 +139,21 @@ ipcMain.handle("oddhr:oauth", (e, { url, back }) => new Promise((resolve) => {
   w.loadURL(url);
 }));
 // Mac 카톡 내보내기 폴더 열기 (홈 폴더 안만)
+// 작업 과정 zip 저장: 저장 위치는 사람이 고른다 (화면은 파일 시스템을 직접 못 쓴다)
+const savedPaths = new Set();
+ipcMain.handle("oddhr:save-file", async (e, { name, bytes } = {}) => {
+  try {
+    const safe = String(name || "ODD HR.zip").replace(/[\\/:*?"<>|]/g, " ").slice(0, 150);
+    if (!/\.zip$/i.test(safe)) return { ok: false, error: "zip 파일만 저장합니다." };
+    const parent = BrowserWindow.fromWebContents(e.sender) || undefined;
+    const r = await dialog.showSaveDialog(parent, { title: "작업 과정 저장", defaultPath: path.join(app.getPath("documents"), safe), filters: [{ name: "압축 파일", extensions: ["zip"] }] });
+    if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+    fs.writeFileSync(r.filePath, Buffer.from(bytes));
+    savedPaths.add(r.filePath);
+    return { ok: true, path: r.filePath };
+  } catch (err) { return { ok: false, error: String(err.message || err) }; }
+});
+ipcMain.handle("oddhr:show-item", async (e, p) => { if (savedPaths.has(p)) shell.showItemInFolder(p); return savedPaths.has(p); });
 ipcMain.handle("oddhr:open-folder", async (e, dir) => {
   const p = path.resolve(String(dir || "").replace(/^~(?=\/|$)/, app.getPath("home")));
   if (!p.startsWith(app.getPath("home"))) return false;
