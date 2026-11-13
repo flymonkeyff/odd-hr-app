@@ -120,10 +120,12 @@ async function fetchVerified(info, onProgress) {
 function install(file, platform, opts) {
   opts = opts || {};
   if (platform === "win32") {
-    // 설치 파일이 지금 앱이 꺼지기를 기다렸다가 조용히 설치하고 다시 켠다 (--force-run)
-    const args = ["/S", "--force-run"];
-    const cmd = `ping -n 3 127.0.0.1 >nul & start "" "${file}" ${args.join(" ")}`;
-    spawn("cmd.exe", ["/d", "/s", "/c", cmd], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    // 지금 앱이 완전히 꺼질 때까지 기다렸다가 설치 프로그램을 연다.
+    // 조용한 설치(/S)는 화면에 아무것도 안 떠서 '앱이 그냥 꺼진' 것처럼 보였다 → 진행 막대가 보이게 연다.
+    // 설치가 끝나면 설치 프로그램이 ODD HR을 다시 켠다 (runAfterFinish).
+    const q = (s) => "'" + String(s).replace(/'/g, "''") + "'";
+    const ps = `$p=${Number(opts.pid || process.pid)}; try { Wait-Process -Id $p -Timeout 60 -ErrorAction SilentlyContinue } catch {}; Start-Sleep -Milliseconds 500; Start-Process -FilePath ${q(file)}`;
+    spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", ps], { detached: true, stdio: "ignore", windowsHide: true }).unref();
     return { ok: true };
   }
   if (platform === "darwin") {

@@ -161,6 +161,26 @@ jobs:
         run: |
           if [ -n "$LINK" ]; then export WIN_CSC_LINK="$LINK" WIN_CSC_KEY_PASSWORD="$PASS"; else echo "서명 인증서 없음: 서명 없이 만든다"; fi
           npm run dist:win
+      - name: 설치 파일 시험 (앱이 여는 방식 그대로 열어서 설치되고 다시 켜지는지)
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist -Filter "ODD-HR-Setup-*.exe" | Select-Object -First 1
+          $env:ODDHR_NO_UPDATE = "1"
+          Start-Process -FilePath $setup.FullName
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\odd-hr"
+          $ok = $false
+          for ($i = 0; $i -lt 90; $i++) {
+            Start-Sleep -Seconds 2
+            $exe = Get-ChildItem (Join-Path $env:LOCALAPPDATA "Programs") -Recurse -Filter "ODD HR.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+            $run = Get-Process -Name "ODD HR" -ErrorAction SilentlyContinue
+            if ($exe -and (Test-Path (Join-Path $exe.DirectoryName "Uninstall ODD HR.exe")) -and $run) { $ok = $true; break }
+          }
+          if (-not $ok) { Get-ChildItem (Join-Path $env:LOCALAPPDATA "Programs") -Recurse -Depth 1 -ErrorAction SilentlyContinue | Select-Object FullName; throw "설치 뒤 ODD HR이 다시 켜지지 않았습니다" }
+          Write-Host "설치됨: $($exe.FullName), 실행 중"
+          $key = Get-ChildItem "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall" | Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -eq "ODD HR" }
+          if (-not $key) { throw "'설치된 앱'에 ODD HR이 등록되지 않았습니다" }
+          Write-Host "'설치된 앱' 등록 확인"
+          Get-Process -Name "ODD HR" -ErrorAction SilentlyContinue | Stop-Process -Force
       - uses: actions/upload-artifact@v4
         with:
           name: ODD-HR-Windows

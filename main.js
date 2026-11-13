@@ -159,8 +159,8 @@ const installedOnWin = () => {
   return roots.some((r) => exe.startsWith(r)) && fs.existsSync(path.join(path.dirname(process.execPath), "Uninstall ODD HR.exe"));
 };
 let splash = null;
-function showSplash(text) {
-  if (START_HIDDEN) return;
+function showSplash(text, force) {
+  if (START_HIDDEN && !force) return;
   const html = `<!doctype html><meta charset="utf-8"><style>
     body{margin:0;font:14px -apple-system,"Segoe UI","Malgun Gothic",sans-serif;background:#fff;color:#1d1d1f;display:grid;place-items:center;height:100vh;-webkit-app-region:drag;user-select:none}
     @media(prefers-color-scheme:dark){body{background:#1c1c1e;color:#f5f5f7}}
@@ -185,13 +185,18 @@ async function updateNow(info, from) {
     const mb = (n) => (n / 1048576).toFixed(0);
     const prog = (got, total) => { const p = total ? Math.round((got / total) * 100) : 0; const sub = total ? `${mb(got)} / ${mb(total)}MB` : `${mb(got)}MB`; splashSet(`새 버전 ${info.latest} 받는 중`, p, sub); sendUpdate({ state: "downloading", percent: p, text: sub }); };
     const got = await updater.fetchVerified(info, prog);
-    splashSet("지문 확인 완료 · 설치하는 중", 100, "잠시 뒤 다시 켜집니다");
     sendUpdate({ state: "installing" });
-    const r = updater.install(got.file, process.platform, { appBundle: appBundle() });
-    if (!r.ok) throw new Error(r.error);
+    // 앱이 말없이 꺼지지 않게: 설정에서 누른 경우에도 안내 창을 띄우고 본 창은 숨긴다
+    const msg = IS_WIN ? "설치 프로그램을 여는 중" : "설치하는 중";
+    const sub = IS_WIN ? "설치가 끝나면 ODD HR이 다시 켜집니다" : "잠시 뒤 다시 켜집니다";
+    if (!splash || splash.isDestroyed()) { try { showSplash(msg, true); await Promise.race([new Promise((res) => splash.webContents.once("did-finish-load", res)), new Promise((res) => setTimeout(res, 1500))]); } catch (e) {} }
+    splashSet(msg, 100, sub);
+    if (win && !win.isDestroyed()) win.hide();
+    const r = updater.install(got.file, process.platform, { appBundle: appBundle(), pid: process.pid });
+    if (!r.ok) { closeSplash(); if (win && !win.isDestroyed()) win.show(); throw new Error(r.error); }
     try { fs.writeFileSync(path.join(app.getPath("userData"), "updated-from"), app.getVersion()); } catch (e) {}
     quitting = true;
-    setTimeout(() => app.exit(0), 400);
+    setTimeout(() => app.exit(0), 1500);
     return { ok: true };
   } catch (e) {
     updating = false;
